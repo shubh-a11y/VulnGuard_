@@ -1,0 +1,41 @@
+{
+  "threshold": 0.4937255382537842,
+  "rows": [
+    {
+      "function_id": "vuln_buffer.c:process_data",
+      "raw_model_probability": 0.7126,
+      "raw_score_0_100": 71.3,
+      "static_signal": "UNBOUNDED_C_API"
+    },
+    {
+      "function_id": "vuln_format.c:log_message",
+      "raw_model_probability": 0.2543,
+      "raw_score_0_100": 25.4,
+      "static_signal": "NON_LITERAL_FORMAT_STRING"
+    },
+    {
+      "function_id": "vuln_race.c:write_secure_log",
+      "raw_model_probability": 0.1339,
+      "raw_score_0_100": 13.4,
+      "static_signal": "TOCTOU_FILE_ACCESS"
+    },
+    {
+      "function_id": "vuln_cmdi.py:ping_host",
+      "raw_model_probability": 0.8066,
+      "raw_score_0_100": 80.7,
+      "static_signal": "SHELL_EXECUTION"
+    },
+    {
+      "function_id": "vuln_sqli.py:get_user",
+      "raw_model_probability": 0.9223,
+      "raw_score_0_100": 92.2,
+      "static_signal": "DYNAMIC_SQL"
+    },
+    {
+      "function_id": "vuln_taint_flow/input_handler.py:handle_request",
+      "raw_model_probability": 0.4217,
+      "raw_score_0_100": 42.2,
+      "static_signal": null
+    }
+  ]
+}

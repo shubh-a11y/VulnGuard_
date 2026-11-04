@@ -1,0 +1,106 @@
+{
+  "case_id": "C06",
+  "relative_path": "data/test_vulns/vuln_taint_flow/input_handler.py",
+  "function": "handle_request",
+  "language": "python",
+  "triage": {
+    "risk_score": 42.2,
+    "bypass_reason": null,
+    "parse_errors": []
+  },
+  "start_byte": 128,
+  "end_byte": 571,
+  "started_wall": 1793182837.928246,
+  "finished_wall": 1793182901.1754904,
+  "elapsed_seconds": 63.247,
+  "exception": null,
+  "usage": {
+    "calls": 3,
+    "input_tokens": 2130,
+    "output_tokens": 4030,
+    "total_tokens": 6160,
+    "cost_usd": 0.05262,
+    "models": [
+      "gemini-3.1-pro-preview"
+    ],
+    "records": [
+      {
+        "timestamp": "2026-10-28T10:21:05.767748+00:00",
+        "provider": "gemini",
+        "model": "gemini-3.1-pro-preview",
+        "input_tokens": 710,
+        "output_tokens": 1010,
+        "reasoning_tokens": 0,
+        "total_tokens": 1720,
+        "estimated_cost_usd": 0.01354,
+        "latency_ms": 14663.774
+      },
+      {
+        "timestamp": "2026-10-28T10:21:28.590454+00:00",
+        "provider": "gemini",
+        "model": "gemini-3.1-pro-preview",
+        "input_tokens": 710,
+        "output_tokens": 2034,
+        "reasoning_tokens": 0,
+        "total_tokens": 2744,
+        "estimated_cost_usd": 0.025828,
+        "latency_ms": 22820.375
+      },
+      {
+        "timestamp": "2026-10-28T10:21:41.171989+00:00",
+        "provider": "gemini",
+        "model": "gemini-3.1-pro-preview",
+        "input_tokens": 710,
+        "output_tokens": 986,
+        "reasoning_tokens": 0,
+        "total_tokens": 1696,
+        "estimated_cost_usd": 0.013252,
+        "latency_ms": 12579.13
+      }
+    ]
+  },
+  "final_state": {
+    "function_id": "data/test_vulns/vuln_taint_flow/input_handler.py:handle_request",
+    "language": "python",
+    "risk_score": 42.2,
+    "file_path": "C:\\Users\\singh\\OneDrive\\Desktop\\AI Projects\\VulnGuard\\data\\test_vulns\\vuln_taint_flow\\input_handler.py",
+    "repo_root": "C:\\Users\\singh\\OneDrive\\Desktop\\AI Projects\\VulnGuard\\data\\test_vulns\\vuln_taint_flow",
+    "start_byte": 128,
+    "end_byte": 571,
+    "red_report": {
+      "vulnerability_found": false,
+      "vulnerability_type": null,
+      "cwe_id": null,
+      "severity": null,
+      "affected_lines": null,
+      "explanation": "The provided function acts as a taint source by accepting untrusted input and passing it to a processor, but it does not contain a vulnerable sink itself. Without the implementation details of DataProcessor, no concrete vulnerability can be justified from the supplied code alone.",
+      "confidence": 1.0,
+      "exploit_type": null,
+      "exploit_code_harness": null,
+      "expected_stdout_regex": null
+    },
+    "vulnerability_found": false,
+    "exploit_status": "NONE",
+    "exploit_error": null,
+    "exploit_harness": null,
+    "exploit_type": null,
+    "expected_stdout_regex": null,
+    "patched_code": null,
+    "patch_justification": null,
+    "patch_diff": null,
+    "build_success": false,
+    "test_success": false,
+    "exploit_blocked": false,
+    "judge_verdict": "",
+    "error_logs": null,
+    "attempt_number": 0,
+    "attempt_history": [],
+    "max_attempts": 3,
+    "pipeline_status": "RED_COMPLETE",
+    "timestamps": {
+      "pipeline_start": 1793182837.928246,
+      "red_end": 1793182901.1739886,
+      "pipeline_end": 1793182901.1754904
+    }
+  }
+}

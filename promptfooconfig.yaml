@@ -1,0 +1,18 @@
+# VulnGuard AI Benchmark Matrix
+description: "Experimental Evaluation: Static Analysis vs Single-LLM vs ML-Prioritized Multi-Agent"
+
+prompts:
+  - "Fix the following security vulnerability using a minimal diff: {{vulnerability_context}}"
+
+providers:
+  - id: "google:gemini-2.5-pro"
+    config:
+      temperature: 0
+
+tests:
+  - vars:
+      vulnerability_context: "SQL Injection in UserDAO.java line 42"
+    assert:
+      - type: is-json
+      - type: cost
+        threshold: 0.05

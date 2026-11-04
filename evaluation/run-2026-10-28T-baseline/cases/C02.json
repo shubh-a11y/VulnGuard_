@@ -1,0 +1,166 @@
+{
+  "case_id": "C02",
+  "relative_path": "data/test_vulns/vuln_cmdi.py",
+  "function": "ping_host",
+  "language": "python",
+  "triage": {
+    "risk_score": 80.7,
+    "bypass_reason": "STATIC_SIGNAL:SHELL_EXECUTION",
+    "parse_errors": []
+  },
+  "start_byte": 13,
+  "end_byte": 378,
+  "started_wall": 1793182282.1822205,
+  "finished_wall": 1793182445.725566,
+  "elapsed_seconds": 163.544,
+  "exception": null,
+  "usage": {
+    "calls": 8,
+    "input_tokens": 6086,
+    "output_tokens": 11969,
+    "total_tokens": 18055,
+    "cost_usd": 0.1558,
+    "models": [
+      "gemini-3.1-pro-preview"
+    ],
+    "records": [
+      {
+        "timestamp": "2026-10-28T10:12:17.722495+00:00",
+        "provider": "gemini",
+        "model": "gemini-3.1-pro-preview",
+        "input_tokens": 686,
+        "output_tokens": 1010,
+        "reasoning_tokens": 0,
+        "total_tokens": 1696,
+        "estimated_cost_usd": 0.013492,
+        "latency_ms": 17638.654
+      },
+      {
+        "timestamp": "2026-10-28T10:12:37.029158+00:00",
+        "provider": "gemini",
+        "model": "gemini-3.1-pro-preview",
+        "input_tokens": 686,
+        "output_tokens": 2034,
+        "reasoning_tokens": 0,
+        "total_tokens": 2720,
+        "estimated_cost_usd": 0.025779999999999997,
+        "latency_ms": 19290.175
+      },
+      {
+        "timestamp": "2026-10-28T10:12:51.304653+00:00",
+        "provider": "gemini",
+        "model": "gemini-3.1-pro-preview",
+        "input_tokens": 686,
+        "output_tokens": 1048,
+        "reasoning_tokens": 0,
+        "total_tokens": 1734,
+        "estimated_cost_usd": 0.013948,
+        "latency_ms": 14268.437
+      },
+      {
+        "timestamp": "2026-10-28T10:13:05.667340+00:00",
+        "provider": "gemini",
+        "model": "gemini-3.1-pro-preview",
+        "input_tokens": 595,
+        "output_tokens": 1010,
+        "reasoning_tokens": 0,
+        "total_tokens": 1605,
+        "estimated_cost_usd": 0.01331,
+        "latency_ms": 14244.577
+      },
+      {
+        "timestamp": "2026-10-28T10:13:18.424643+00:00",
+        "provider": "gemini",
+        "model": "gemini-3.1-pro-preview",
+        "input_tokens": 595,
+        "output_tokens": 906,
+        "reasoning_tokens": 0,
+        "total_tokens": 1501,
+        "estimated_cost_usd": 0.012062,
+        "latency_ms": 12752.439
+      },
+      {
+        "timestamp": "2026-10-28T10:13:27.257707+00:00",
+        "provider": "gemini",
+        "model": "gemini-3.1-pro-preview",
+        "input_tokens": 946,
+        "output_tokens": 1010,
+        "reasoning_tokens": 0,
+        "total_tokens": 1956,
+        "estimated_cost_usd": 0.014012,
+        "latency_ms": 8803.761
+      },
+      {
+        "timestamp": "2026-10-28T10:13:43.582976+00:00",
+        "provider": "gemini",
+        "model": "gemini-3.1-pro-preview",
+        "input_tokens": 946,
+        "output_tokens": 2034,
+        "reasoning_tokens": 0,
+        "total_tokens": 2980,
+        "estimated_cost_usd": 0.0263,
+        "latency_ms": 16317.644
+      },
+      {
+        "timestamp": "2026-10-28T10:14:05.715469+00:00",
+        "provider": "gemini",
+        "model": "gemini-3.1-pro-preview",
+        "input_tokens": 946,
+        "output_tokens": 2917,
+        "reasoning_tokens": 0,
+        "total_tokens": 3863,
+        "estimated_cost_usd": 0.036896,
+        "latency_ms": 22128.86
+      }
+    ]
+  },
+  "final_state": {
+    "function_id": "data/test_vulns/vuln_cmdi.py:ping_host",
+    "language": "python",
+    "risk_score": 80.7,
+    "file_path": "C:\\Users\\singh\\OneDrive\\Desktop\\AI Projects\\VulnGuard\\data\\test_vulns\\vuln_cmdi.py",
+    "repo_root": "C:\\Users\\singh\\OneDrive\\Desktop\\AI Projects\\VulnGuard\\data\\test_vulns",
+    "start_byte": 13,
+    "end_byte": 378,
+    "red_report": {
+      "vulnerability_found": true,
+      "vulnerability_type": "COMMAND_INJECTION",
+      "cwe_id": "CWE-78",
+      "severity": "CRITICAL",
+      "affected_lines": [
+        4,
+        8
+      ],
+      "explanation": "The function constructs an OS command by directly interpolating the untrusted hostname parameter into an f-string without sanitization. This string is then passed to os.system, which executes it within a shell environment. An attacker can supply shell metacharacters, such as semicolons or command substitution sequences, to execute arbitrary OS commands alongside the intended ping command.",
+      "confidence": 1.0,
+      "exploit_type": null,
+      "exploit_code_harness": null,
+      "expected_stdout_regex": null
+    },
+    "vulnerability_found": true,
+    "exploit_status": "INVALID",
+    "exploit_error": "the model did not provide an exploit harness",
+    "exploit_harness": null,
+    "exploit_type": null,
+    "expected_stdout_regex": null,
+    "patched_code": "def ping_host(hostname):\n    command = f\"ping -c 1 {hostname}\"\n    \n    print(f\"Executing: {command}\")\n    result = os.spawnvp(os.P_WAIT, 'ping', ['ping', '-c', '1', str(hostname)])\n    \n    return result",
+    "patch_justification": "Using `os.spawnvp` with an argument list prevents command injection because the arguments are passed directly to the executable without being interpreted by a shell. This ensures that any shell metacharacters in the `hostname` parameter are treated as literal characters rather than executable commands, while strictly adhering to the constraint of not adding new imports.",
+    "patch_diff": "--- original\n+++ patched\n@@ -1,10 +1,7 @@\n def ping_host(hostname):\n-    # VULNERABILITY: Command Injection\n-    # If hostname is \"localhost; cat /etc/passwd\", it executes both commands.\n     command = f\"ping -c 1 {hostname}\"\n     \n     print(f\"Executing: {command}\")\n-    # os.system executes the command in a subshell, allowing shell metacharacters\n-    result = os.system(command)\n+    result = os.spawnvp(os.P_WAIT, 'ping', ['ping', '-c', '1', str(hostname)])\n     \n     return result",
+    "build_success": true,
+    "test_success": true,
+    "exploit_blocked": false,
+    "judge_verdict": "EXPLOIT_INVALID",
+    "error_logs": "The proof of concept for this finding was invalid, so the patch could not be validated. the model did not provide an exploit harness",
+    "attempt_number": 0,
+    "attempt_history": [],
+    "max_attempts": 3,
+    "pipeline_status": "FAILED",
+    "timestamps": {
+      "pipeline_start": 1793182282.1822205,
+      "red_end": 1793182398.4311786,
+      "blue_end": 1793182398.4337091,
+      "judge_end": 1793182445.7245426,
+      "pipeline_end": 1793182445.725566
+    }
+  }
+}

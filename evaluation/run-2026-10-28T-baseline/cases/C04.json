@@ -1,0 +1,132 @@
+{
+  "case_id": "C04",
+  "relative_path": "data/test_vulns/vuln_format.c",
+  "function": "log_message",
+  "language": "c",
+  "triage": {
+    "risk_score": 30.0,
+    "bypass_reason": "STATIC_SIGNAL:NON_LITERAL_FORMAT_STRING",
+    "parse_errors": []
+  },
+  "start_byte": 43,
+  "end_byte": 340,
+  "started_wall": 1793182613.5149994,
+  "finished_wall": 1793182697.404768,
+  "elapsed_seconds": 83.89,
+  "exception": null,
+  "usage": {
+    "calls": 5,
+    "input_tokens": 3377,
+    "output_tokens": 5249,
+    "total_tokens": 8626,
+    "cost_usd": 0.069742,
+    "models": [
+      "gemini-3.1-pro-preview"
+    ],
+    "records": [
+      {
+        "timestamp": "2026-10-28T10:17:22.395695+00:00",
+        "provider": "gemini",
+        "model": "gemini-3.1-pro-preview",
+        "input_tokens": 666,
+        "output_tokens": 1010,
+        "reasoning_tokens": 0,
+        "total_tokens": 1676,
+        "estimated_cost_usd": 0.013452,
+        "latency_ms": 15332.193
+      },
+      {
+        "timestamp": "2026-10-28T10:17:38.923223+00:00",
+        "provider": "gemini",
+        "model": "gemini-3.1-pro-preview",
+        "input_tokens": 666,
+        "output_tokens": 1550,
+        "reasoning_tokens": 0,
+        "total_tokens": 2216,
+        "estimated_cost_usd": 0.019932000000000002,
+        "latency_ms": 16522.856
+      },
+      {
+        "timestamp": "2026-10-28T10:17:55.458357+00:00",
+        "provider": "gemini",
+        "model": "gemini-3.1-pro-preview",
+        "input_tokens": 561,
+        "output_tokens": 1010,
+        "reasoning_tokens": 0,
+        "total_tokens": 1571,
+        "estimated_cost_usd": 0.013242,
+        "latency_ms": 16531.219
+      },
+      {
+        "timestamp": "2026-10-28T10:18:11.288311+00:00",
+        "provider": "gemini",
+        "model": "gemini-3.1-pro-preview",
+        "input_tokens": 561,
+        "output_tokens": 972,
+        "reasoning_tokens": 0,
+        "total_tokens": 1533,
+        "estimated_cost_usd": 0.012786,
+        "latency_ms": 15826.406
+      },
+      {
+        "timestamp": "2026-10-28T10:18:17.401172+00:00",
+        "provider": "gemini",
+        "model": "gemini-3.1-pro-preview",
+        "input_tokens": 923,
+        "output_tokens": 707,
+        "reasoning_tokens": 0,
+        "total_tokens": 1630,
+        "estimated_cost_usd": 0.01033,
+        "latency_ms": 6101.96
+      }
+    ]
+  },
+  "final_state": {
+    "function_id": "data/test_vulns/vuln_format.c:log_message",
+    "language": "c",
+    "risk_score": 30.0,
+    "file_path": "C:\\Users\\singh\\OneDrive\\Desktop\\AI Projects\\VulnGuard\\data\\test_vulns\\vuln_format.c",
+    "repo_root": "C:\\Users\\singh\\OneDrive\\Desktop\\AI Projects\\VulnGuard\\data\\test_vulns",
+    "start_byte": 43,
+    "end_byte": 340,
+    "red_report": {
+      "vulnerability_found": true,
+      "vulnerability_type": "FORMAT_STRING",
+      "cwe_id": "CWE-134",
+      "severity": "HIGH",
+      "affected_lines": [
+        6
+      ],
+      "explanation": "The function passes the caller-controlled 'msg' parameter directly as the format string argument to 'printf'. If an attacker provides a string containing format specifiers such as '%x', '%s', or '%n', they can read from or write to arbitrary memory locations on the stack. This can lead to information disclosure or arbitrary code execution.",
+      "confidence": 1.0,
+      "exploit_type": null,
+      "exploit_code_harness": null,
+      "expected_stdout_regex": null
+    },
+    "vulnerability_found": true,
+    "exploit_status": "INVALID",
+    "exploit_error": "the model did not provide an exploit harness",
+    "exploit_harness": null,
+    "exploit_type": null,
+    "expected_stdout_regex": null,
+    "patched_code": "void log_message(char *msg) {\n    // VULNERABILITY: Format string vulnerability\n    // The user controls the format string itself.\n    // If msg is \"%x %x %x\", it will leak stack memory.\n    // If msg is \"%n\", it can write to arbitrary memory locations.\n    printf(\"%s\", msg);\n    printf(\"\\n\");\n}",
+    "patch_justification": "By explicitly specifying the format string as \"%s\", the user-provided `msg` is treated purely as data (a string literal) rather than a format string. This prevents attackers from injecting format specifiers (like %x or %n) to read or write arbitrary memory.",
+    "patch_diff": "--- original\n+++ patched\n@@ -3,6 +3,6 @@\n     // The user controls the format string itself.\n     // If msg is \"%x %x %x\", it will leak stack memory.\n     // If msg is \"%n\", it can write to arbitrary memory locations.\n-    printf(msg);\n+    printf(\"%s\", msg);\n     printf(\"\\n\");\n }",
+    "build_success": true,
+    "test_success": true,
+    "exploit_blocked": false,
+    "judge_verdict": "EXPLOIT_INVALID",
+    "error_logs": "The proof of concept for this finding was invalid, so the patch could not be validated. the model did not provide an exploit harness",
+    "attempt_number": 0,
+    "attempt_history": [],
+    "max_attempts": 3,
+    "pipeline_status": "FAILED",
+    "timestamps": {
+      "pipeline_start": 1793182613.5149994,
+      "red_end": 1793182691.2920027,
+      "blue_end": 1793182691.2930152,
+      "judge_end": 1793182697.4040914,
+      "pipeline_end": 1793182697.404768
+    }
+  }
+}

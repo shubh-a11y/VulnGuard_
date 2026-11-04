@@ -1,0 +1,144 @@
+{
+  "case_id": "C01",
+  "relative_path": "data/test_vulns/vuln_sqli.py",
+  "function": "get_user",
+  "language": "python",
+  "triage": {
+    "risk_score": 92.2,
+    "bypass_reason": "STATIC_SIGNAL:DYNAMIC_SQL",
+    "parse_errors": []
+  },
+  "start_byte": 18,
+  "end_byte": 465,
+  "started_wall": 1793181985.2127244,
+  "finished_wall": 1793182101.9941297,
+  "elapsed_seconds": 116.781,
+  "exception": null,
+  "usage": {
+    "calls": 6,
+    "input_tokens": 4377,
+    "output_tokens": 6312,
+    "total_tokens": 10689,
+    "cost_usd": 0.084498,
+    "models": [
+      "gemini-3.1-pro-preview"
+    ],
+    "records": [
+      {
+        "timestamp": "2026-10-28T10:07:11.936369+00:00",
+        "provider": "gemini",
+        "model": "gemini-3.1-pro-preview",
+        "input_tokens": 711,
+        "output_tokens": 1010,
+        "reasoning_tokens": 0,
+        "total_tokens": 1721,
+        "estimated_cost_usd": 0.013542,
+        "latency_ms": 16212.607
+      },
+      {
+        "timestamp": "2026-10-28T10:07:33.738204+00:00",
+        "provider": "gemini",
+        "model": "gemini-3.1-pro-preview",
+        "input_tokens": 711,
+        "output_tokens": 1788,
+        "reasoning_tokens": 0,
+        "total_tokens": 2499,
+        "estimated_cost_usd": 0.022878,
+        "latency_ms": 21798.198
+      },
+      {
+        "timestamp": "2026-10-28T10:07:47.621141+00:00",
+        "provider": "gemini",
+        "model": "gemini-3.1-pro-preview",
+        "input_tokens": 616,
+        "output_tokens": 1010,
+        "reasoning_tokens": 0,
+        "total_tokens": 1626,
+        "estimated_cost_usd": 0.013352000000000001,
+        "latency_ms": 13853.089
+      },
+      {
+        "timestamp": "2026-10-28T10:08:03.241139+00:00",
+        "provider": "gemini",
+        "model": "gemini-3.1-pro-preview",
+        "input_tokens": 616,
+        "output_tokens": 1139,
+        "reasoning_tokens": 0,
+        "total_tokens": 1755,
+        "estimated_cost_usd": 0.0149,
+        "latency_ms": 15615.158
+      },
+      {
+        "timestamp": "2026-10-28T10:08:16.066956+00:00",
+        "provider": "gemini",
+        "model": "gemini-3.1-pro-preview",
+        "input_tokens": 759,
+        "output_tokens": 875,
+        "reasoning_tokens": 0,
+        "total_tokens": 1634,
+        "estimated_cost_usd": 0.012018000000000001,
+        "latency_ms": 12723.027
+      },
+      {
+        "timestamp": "2026-10-28T10:08:21.922388+00:00",
+        "provider": "gemini",
+        "model": "gemini-3.1-pro-preview",
+        "input_tokens": 964,
+        "output_tokens": 490,
+        "reasoning_tokens": 0,
+        "total_tokens": 1454,
+        "estimated_cost_usd": 0.007808,
+        "latency_ms": 5658.702
+      }
+    ]
+  },
+  "final_state": {
+    "function_id": "data/test_vulns/vuln_sqli.py:get_user",
+    "language": "python",
+    "risk_score": 92.2,
+    "file_path": "C:\\Users\\singh\\OneDrive\\Desktop\\AI Projects\\VulnGuard\\data\\test_vulns\\vuln_sqli.py",
+    "repo_root": "C:\\Users\\singh\\OneDrive\\Desktop\\AI Projects\\VulnGuard\\data\\test_vulns",
+    "start_byte": 18,
+    "end_byte": 465,
+    "red_report": {
+      "vulnerability_found": true,
+      "vulnerability_type": "SQL_INJECTION",
+      "cwe_id": "CWE-89",
+      "severity": "CRITICAL",
+      "affected_lines": [
+        8,
+        10
+      ],
+      "explanation": "The function directly concatenates the untrusted username parameter into the SQL query string. This allows an attacker to inject arbitrary SQL commands by supplying a crafted input containing SQL metacharacters, such as a single quote followed by a tautology and a comment indicator. This defect compromises data integrity and confidentiality, as it permits unauthorized database queries.",
+      "confidence": 1.0,
+      "exploit_type": null,
+      "exploit_code_harness": null,
+      "expected_stdout_regex": null
+    },
+    "vulnerability_found": true,
+    "exploit_status": "INVALID",
+    "exploit_error": "the harness has no expected_stdout_regex success signal; corrected harness still invalid: the harness has no expected_stdout_regex success signal",
+    "exploit_harness": null,
+    "exploit_type": null,
+    "expected_stdout_regex": null,
+    "patched_code": "def get_user(username):\n    conn = sqlite3.connect('users.db')\n    cursor = conn.cursor()\n    \n    # VULNERABILITY: SQL Injection via string concatenation\n    # If username is \"admin' --\", the query becomes:\n    # SELECT * FROM users WHERE username = 'admin' --'\n    query = \"SELECT * FROM users WHERE username = ?\"\n    \n    cursor.execute(query, (username,))\n    result = cursor.fetchall()\n    conn.close()\n    \n    return result",
+    "patch_justification": "Using parameterized queries (with `?` placeholder) ensures that the database driver treats the `username` input strictly as data, not as executable SQL code. This prevents SQL injection attacks while maintaining the exact same functionality.",
+    "patch_diff": "--- original\n+++ patched\n@@ -5,9 +5,9 @@\n     # VULNERABILITY: SQL Injection via string concatenation\n     # If username is \"admin' --\", the query becomes:\n     # SELECT * FROM users WHERE username = 'admin' --'\n-    query = \"SELECT * FROM users WHERE username = '\" + username + \"'\"\n+    query = \"SELECT * FROM users WHERE username = ?\"\n     \n-    cursor.execute(query)\n+    cursor.execute(query, (username,))\n     result = cursor.fetchall()\n     conn.close()\n     ",
+    "build_success": true,
+    "test_success": true,
+    "exploit_blocked": false,
+    "judge_verdict": "EXPLOIT_INVALID",
+    "error_logs": "The proof of concept for this finding was invalid, so the patch could not be validated. the harness has no expected_stdout_regex success signal; corrected harness still invalid: the harness has no expected_stdout_regex success signal",
+    "attempt_number": 0,
+    "attempt_history": [],
+    "max_attempts": 3,
+    "pipeline_status": "FAILED",
+    "timestamps": {
+      "pipeline_start": 1793181985.2127244,
+      "red_end": 1793182096.085745,
+      "blue_end": 1793182096.0956066,
+      "judge_end": 1793182101.9740777,
+      "pipeline_end": 1793182101.9941297
+    }
+  }
+}

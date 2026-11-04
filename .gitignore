@@ -1,0 +1,37 @@
+# ── Python ────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+.venv/
+venv/
+
+# ── Node / UI ─────────────────────────────────────────────
+node_modules/
+ui/dist/
+dist/
+*.log
+logs/
+
+# ── Environment & secrets ─────────────────────────────────
+.env
+.env.local
+.env.*.local
+
+# ── Data, models & generated artifacts ────────────────────
+data/cache/
+data/uploads/
+data/vulnguard.db*
+data/llm_usage.jsonl
+data/benchmarks*/
+*.parquet
+
+# ── Editors & tools ───────────────────────────────────────
+.DS_Store
+.idea/
+.freebuff/

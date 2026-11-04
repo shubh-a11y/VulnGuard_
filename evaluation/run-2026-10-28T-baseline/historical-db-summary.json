@@ -1,0 +1,50 @@
+{
+  "rows": 92,
+  "created_at_first": "2026-10-25T06:42:56.078356+00:00",
+  "created_at_last": "2026-10-26T11:00:15.632816+00:00",
+  "verdicts": {
+    "": 85,
+    "PASS": 5,
+    "EXPLOIT_NOT_REPRODUCED": 1,
+    "SANDBOX_UNAVAILABLE": 1
+  },
+  "status": {
+    "RED_PARSE_ERROR": 8,
+    "DISCONNECTED": 3,
+    "COMPLETE": 34,
+    "ERROR": 45,
+    "TRIAGE": 1,
+    "FAILED": 1
+  },
+  "vulnerability_found_true": 7,
+  "attempt_number": {
+    "0": 70,
+    "None": 22
+  },
+  "distinct_function_ids": 16,
+  "top_function_ids": {
+    "vuln_buffer.c:process_data": 9,
+    "vuln_buffer.c:main": 8,
+    "vuln_cmdi.py:ping_host": 8,
+    "vuln_format.c:log_message": 7,
+    "vuln_format.c:main": 7,
+    "vuln_race.c:write_secure_log": 7,
+    "vuln_race.c:main": 6,
+    "vuln_sqli.py:get_user": 6,
+    "vuln_taint_flow/database.py:__init__": 6,
+    "vuln_taint_flow/database.py:_setup": 6
+  },
+  "durations_s": {
+    "n": 0,
+    "median": null,
+    "mean": null,
+    "min": null,
+    "max": null
+  },
+  "red_vuln_types": {
+    "COMMAND_INJECTION": 2,
+    "SQL_INJECTION": 3,
+    "IMPROPER_INPUT_VALIDATION": 1,
+    "BUFFER_OVERFLOW": 1
+  }
+}

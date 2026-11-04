@@ -1,0 +1,124 @@
+CONTINUATION PROMPT — VulnGuard backend + UI evaluation analytics pass
+=====================================================================
+
+WHAT WAS DONE
+--------------
+1. Labeled evaluation run wired through the full agent pipeline and exposed in the backend.
+   - Added/rewrote:
+     - vulnguard/evaluation.py — new long module with:
+       - LabelResult, EvaluationMetrics dataclasses
+       - KNOWN_VULN_FUNCTIONS list over data/test_vulns
+       - run_labeled_evaluation(), run_writeback_pass(), run_and_save_evaluation()
+       - render_figures_from_metrics() plus individual paper-figure helpers:
+         evaluation_verdict_distribution.png,
+         evaluation_pipeline_funnel.png,
+         evaluation_risk_distribution.png,
+         model_health_summary.png,
+         llm_usage_summary.png
+       - write_evaluation_json(), write_evaluation_summary() into data/benchmarks
+       - model_health_metrics_from_store()
+   - Extended vulnguard/agents/graph.py:
+     - Added PipelineResult type alias
+     - Added public run_pipeline() that returns a plain dict shape
+   - Extended vulnguard/sandbox/patcher.py:
+     - apply_patch now takes backup_dir and returns (target, backup)
+     - Added restore_backup()
+     - Added apply_patch_with_validation() for the post-Judge writeback path
+   - Extended vulnguard/ui/server.py:
+     - Imported evaluation symbols and run_pipeline
+     - Added BENCHMARK_DIR / EVALUATION_JSON / EVALUATION_MD constants
+     - Added endpoints:
+       - GET /api/scan/verdict-distribution
+       - GET /api/scan/successful-fixes
+       - GET /api/evaluation/model-health
+       - GET /api/evaluation/health
+       - POST /api/evaluation/run
+       - GET /api/evaluation/figures/{filename}
+     - NOTE: the file currently starts with a stray leading-space line at the very top
+       before the docstring. That is the only remaining syntax problem in this file and
+       it was fixed in the last verification step by removing that leading space.
+
+2. Post-Judge writeback path with backup/restore so patches land in the source file.
+   - The patcher now writes a timestamped backup before splicing.
+   - evaluation.run_writeback_pass() applies Judge-PASS patches back into data/test_vulns
+     using apply_patch_with_validation + a post-write syntax check.
+
+3. Extended UI below the agent stream with evaluation/model/successful-fixes analytics.
+   - ui/src/components/Dashboard.tsx:
+     - Added typed interfaces: BackendMetrics, EvaluationHealth, ModelHealth, VerdictDistribution
+     - Added state: evaluationHealth, evaluationRunStatus, evaluationRunError, figureFiles,
+       figuresDir, selectedFigure, metrics, modelHealth, verdictDistribution, evaluation,
+       successfulFixes, runningEvaluation, figuresGallery, figureCache
+     - loadDashboardData now also fetches:
+       - /api/scan/verdict-distribution
+       - /api/scan/successful-fixes?limit=12
+       - /api/evaluation/health
+     - Added refreshEvaluationHealth()
+     - Added runEvaluation() watcher-style run via http://localhost:8000
+     - Added handleRunEvaluation() same-name button action via /api/evaluation/run
+     - Added openFigure(), handleFetchFigure(), figureSrc() with figure cache
+     - Fixed batch progress math: current is now Math.ceil((index + 1) / functions.length * 100)
+     - Rendered analytics panel when evaluationHealth?.evaluation_json_exists is true:
+       - Re-run evaluation button bound to handleRunEvaluation
+       - status chips: running / error(with message) / complete
+       - Metrics cards: functions evaluated, vulns detected, recall, patch success
+       - Model health cards: detection recall, triage precision*, patch success
+       - Patch validation outcomes chips from verdictDistribution
+       - Generated figures grid with in-UI toggle for full-size figure
+         and selectedFigure caption line including figuresDir fallback
+       - Recent validated fixes list using successfulFixes
+     - Removed duplicate evaluation/evaluationHealth/verdictDistribution declarations from
+       the older part of the component.
+
+VERIFIED
+--------
+- Compiled successfully:
+  - vulnguard/evaluation.py
+  - vulnguard/agents/graph.py
+  - vulnguard/sandbox/patcher.py
+  - vulnguard/ui/server.py
+- Dashboard literals verified present in source:
+  - handleRunEvaluation defined and wired to the Re-run evaluation button
+  - handleFetchFigure defined
+  - figureSrc caching figure URLs
+  - Math.ceil progress formula present, Math.floor variant absent
+  - Close </p> tag restored on the full-size caption line
+- git diff reviewed for the five changed files.
+
+REMAINING / WATCH ITEMS
+------------------------
+- The UI still refers to http://localhost:8000 in several fetch calls, which is fine if
+  the backend runs on that origin. The new handleRunEvaluation path uses relative /api/...
+  URLs, so that button will use the current page origin.
+- If you want the analytics panel to also show successful fixes coming from the evaluation
+  run itself, you will need the evaluation payload to include them or the UI to reload
+  /api/scan/successful-fixes after a run. Today it calls refreshEvaluationHealth, not
+  the successful-fixes endpoint, after handleRunEvaluation completes.
+- If the backend is started and data/benchmarks is writable, the first POST to
+  /api/evaluation/run should produce:
+  - data/benchmarks/evaluation.json
+  - data/benchmarks/evaluation_summary.md
+  - the 5 labeled PNGs above
+- The dashboard button label uses the same name as the other evaluation run function in the
+  component, so there are now two evaluation-run handlers in the file:
+  - runEvaluation() — existing watcher-style run against localhost:8000
+  - handleRunEvaluation() — new button handler using relative URLs
+
+NEXT SESSION STARTING POINT
+---------------------------
+- Quick sanity check:
+  - python -m py_compile vulnguard/ui/server.py vulnguard/evaluation.py vulnguard/agents/graph.py vulnguard/sandbox/patcher.py
+  - python - <<'PY'
+    import pathlib
+    p = pathlib.Path('ui/src/components/Dashboard.tsx')
+    s = p.read_text(encoding='utf-8')
+    for name, expr in {
+        'handleRunEvaluation': 'const handleRunEvaluation = async () =>',
+        'handleRunEvaluationWired': 'onClick={handleRunEvaluation}',
+        'figureSrc': 'const figureSrc = (name: string) =>',
+        'ceilProgress': 'Math.ceil((index + 1) / functions.length * 100)',
+    }.items():
+        print(name, expr in s)
+    PY
+- Then start the backend and UI, hit Re-run evaluation, and confirm data/benchmarks fills
+  with the JSON, Markdown, and 5 PNGs.

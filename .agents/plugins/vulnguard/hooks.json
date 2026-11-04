@@ -1,0 +1,10 @@
+{
+  "hooks": [
+    {
+      "event": "pre-agent-exec",
+      "command": "python scripts/train_classifier.py",
+      "description": "Runs local ML vulnerability risk classifier before invoking Red-Blue LLM agents.",
+      "on_failure": "block"
+    }
+  ]
+}

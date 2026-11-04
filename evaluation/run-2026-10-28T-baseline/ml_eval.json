@@ -1,0 +1,363 @@
+{
+  "model_path": "C:\\Users\\singh\\OneDrive\\Desktop\\AI Projects\\VulnGuard\\vulnguard\\models\\artifacts\\vulnguard_classifier.joblib",
+  "deployed_risk_threshold_0_100": 30,
+  "model_probability_threshold": 0.4937255382537842,
+  "template_dampening_factor": 0.5,
+  "mega_function_loc_limit": 2000,
+  "labeled_cohort": [
+    {
+      "function_id": "vuln_buffer.c:process_data",
+      "relative_path": "data/test_vulns/vuln_buffer.c",
+      "language": "c",
+      "label": "vulnerable",
+      "label_source": "vulnguard.evaluation.KNOWN_VULN_FUNCTIONS",
+      "risk_score": 71.3,
+      "bypass_reason": "STATIC_SIGNAL:UNBOUNDED_C_API",
+      "flagged_at_threshold": true,
+      "model_probability": 0.713
+    },
+    {
+      "function_id": "vuln_format.c:log_message",
+      "relative_path": "data/test_vulns/vuln_format.c",
+      "language": "c",
+      "label": "vulnerable",
+      "label_source": "vulnguard.evaluation.KNOWN_VULN_FUNCTIONS",
+      "risk_score": 30.0,
+      "bypass_reason": "STATIC_SIGNAL:NON_LITERAL_FORMAT_STRING",
+      "flagged_at_threshold": true,
+      "model_probability": 0.3
+    },
+    {
+      "function_id": "vuln_race.c:write_secure_log",
+      "relative_path": "data/test_vulns/vuln_race.c",
+      "language": "c",
+      "label": "vulnerable",
+      "label_source": "vulnguard.evaluation.KNOWN_VULN_FUNCTIONS",
+      "risk_score": 30.0,
+      "bypass_reason": "STATIC_SIGNAL:TOCTOU_FILE_ACCESS",
+      "flagged_at_threshold": true,
+      "model_probability": 0.3
+    },
+    {
+      "function_id": "vuln_cmdi.py:ping_host",
+      "relative_path": "data/test_vulns/vuln_cmdi.py",
+      "language": "python",
+      "label": "vulnerable",
+      "label_source": "vulnguard.evaluation.KNOWN_VULN_FUNCTIONS",
+      "risk_score": 80.7,
+      "bypass_reason": "STATIC_SIGNAL:SHELL_EXECUTION",
+      "flagged_at_threshold": true,
+      "model_probability": 0.807
+    },
+    {
+      "function_id": "vuln_sqli.py:get_user",
+      "relative_path": "data/test_vulns/vuln_sqli.py",
+      "language": "python",
+      "label": "vulnerable",
+      "label_source": "vulnguard.evaluation.KNOWN_VULN_FUNCTIONS",
+      "risk_score": 92.2,
+      "bypass_reason": "STATIC_SIGNAL:DYNAMIC_SQL",
+      "flagged_at_threshold": true,
+      "model_probability": 0.922
+    },
+    {
+      "function_id": "vuln_taint_flow/input_handler.py:handle_request",
+      "relative_path": "data/test_vulns/vuln_taint_flow/input_handler.py",
+      "language": "python",
+      "label": "vulnerable",
+      "label_source": "vulnguard.evaluation.KNOWN_VULN_FUNCTIONS",
+      "risk_score": 42.2,
+      "bypass_reason": null,
+      "flagged_at_threshold": true,
+      "model_probability": 0.422
+    }
+  ],
+  "labeled_summary": {
+    "labeled_examples": 6,
+    "labeled_positives": 6,
+    "labeled_negatives": 0,
+    "flagged": 6
+  },
+  "latency": {
+    "samples": 150,
+    "repeats_per_function": 25,
+    "median_ms": 2.248,
+    "mean_ms": 2.449,
+    "p95_ms": 3.369,
+    "by_language": {
+      "c": {
+        "samples": 75,
+        "median_ms": 2.572,
+        "mean_ms": 2.824,
+        "p95_ms": 4.137
+      },
+      "python": {
+        "samples": 75,
+        "median_ms": 2.031,
+        "mean_ms": 2.073,
+        "p95_ms": 2.537
+      }
+    }
+  },
+  "fixture_selection": {
+    "functions_parsed": 14,
+    "functions_flagged": 11,
+    "selection_ratio": 0.7857142857142857,
+    "rows": [
+      {
+        "function_id": "vuln_buffer.c:process_data",
+        "language": "c",
+        "risk_score": 71.3,
+        "bypass_reason": "STATIC_SIGNAL:UNBOUNDED_C_API",
+        "flagged": true
+      },
+      {
+        "function_id": "vuln_buffer.c:main",
+        "language": "c",
+        "risk_score": 27.0,
+        "bypass_reason": null,
+        "flagged": false
+      },
+      {
+        "function_id": "vuln_cmdi.py:ping_host",
+        "language": "python",
+        "risk_score": 80.7,
+        "bypass_reason": "STATIC_SIGNAL:SHELL_EXECUTION",
+        "flagged": true
+      },
+      {
+        "function_id": "vuln_format.c:log_message",
+        "language": "c",
+        "risk_score": 30.0,
+        "bypass_reason": "STATIC_SIGNAL:NON_LITERAL_FORMAT_STRING",
+        "flagged": true
+      },
+      {
+        "function_id": "vuln_format.c:main",
+        "language": "c",
+        "risk_score": 27.0,
+        "bypass_reason": null,
+        "flagged": false
+      },
+      {
+        "function_id": "vuln_race.c:write_secure_log",
+        "language": "c",
+        "risk_score": 30.0,
+        "bypass_reason": "STATIC_SIGNAL:TOCTOU_FILE_ACCESS",
+        "flagged": true
+      },
+      {
+        "function_id": "vuln_race.c:main",
+        "language": "c",
+        "risk_score": 27.0,
+        "bypass_reason": null,
+        "flagged": false
+      },
+      {
+        "function_id": "vuln_sqli.py:get_user",
+        "language": "python",
+        "risk_score": 92.2,
+        "bypass_reason": "STATIC_SIGNAL:DYNAMIC_SQL",
+        "flagged": true
+      },
+      {
+        "function_id": "vuln_taint_flow/database.py:__init__",
+        "language": "python",
+        "risk_score": 42.5,
+        "bypass_reason": null,
+        "flagged": true
+      },
+      {
+        "function_id": "vuln_taint_flow/database.py:_setup",
+        "language": "python",
+        "risk_score": 92.1,
+        "bypass_reason": null,
+        "flagged": true
+      },
+      {
+        "function_id": "vuln_taint_flow/database.py:update_user_status",
+        "language": "python",
+        "risk_score": 92.4,
+        "bypass_reason": "STATIC_SIGNAL:DYNAMIC_SQL",
+        "flagged": true
+      },
+      {
+        "function_id": "vuln_taint_flow/input_handler.py:handle_request",
+        "language": "python",
+        "risk_score": 42.2,
+        "bypass_reason": null,
+        "flagged": true
+      },
+      {
+        "function_id": "vuln_taint_flow/processor.py:__init__",
+        "language": "python",
+        "risk_score": 32.3,
+        "bypass_reason": null,
+        "flagged": true
+      },
+      {
+        "function_id": "vuln_taint_flow/processor.py:process",
+        "language": "python",
+        "risk_score": 42.2,
+        "bypass_reason": null,
+        "flagged": true
+      }
+    ]
+  },
+  "repo_selection": {
+    "repository": "vulnguard/",
+    "labeled": false,
+    "functions_extracted": 249,
+    "functions_flagged": 186,
+    "selection_ratio": 0.7469879518072289,
+    "languages_unsupported": 0,
+    "per_file": [
+      {
+        "file": "vulnguard/config.py",
+        "functions": 5,
+        "flagged": 5
+      },
+      {
+        "file": "vulnguard/evaluation.py",
+        "functions": 24,
+        "flagged": 15
+      },
+      {
+        "file": "vulnguard/llm_runtime.py",
+        "functions": 7,
+        "flagged": 4
+      },
+      {
+        "file": "vulnguard/main.py",
+        "functions": 11,
+        "flagged": 11
+      },
+      {
+        "file": "vulnguard/queue.py",
+        "functions": 4,
+        "flagged": 4
+      },
+      {
+        "file": "vulnguard/worker.py",
+        "functions": 1,
+        "flagged": 1
+      },
+      {
+        "file": "vulnguard/agents/blue_agent.py",
+        "functions": 10,
+        "flagged": 5
+      },
+      {
+        "file": "vulnguard/agents/graph.py",
+        "functions": 5,
+        "flagged": 4
+      },
+      {
+        "file": "vulnguard/agents/judge_agent.py",
+        "functions": 9,
+        "flagged": 6
+      },
+      {
+        "file": "vulnguard/agents/llm_calls.py",
+        "functions": 4,
+        "flagged": 3
+      },
+      {
+        "file": "vulnguard/agents/llm_parsing.py",
+        "functions": 6,
+        "flagged": 6
+      },
+      {
+        "file": "vulnguard/agents/red_agent.py",
+        "functions": 15,
+        "flagged": 6
+      },
+      {
+        "file": "vulnguard/agents/state.py",
+        "functions": 1,
+        "flagged": 0
+      },
+      {
+        "file": "vulnguard/benchmarks/evaluator.py",
+        "functions": 18,
+        "flagged": 13
+      },
+      {
+        "file": "vulnguard/benchmarks/runner.py",
+        "functions": 1,
+        "flagged": 0
+      },
+      {
+        "file": "vulnguard/benchmarks/single_llm.py",
+        "functions": 1,
+        "flagged": 0
+      },
+      {
+        "file": "vulnguard/benchmarks/static_analyzer.py",
+        "functions": 4,
+        "flagged": 4
+      },
+      {
+        "file": "vulnguard/data/context_extractor.py",
+        "functions": 8,
+        "flagged": 7
+      },
+      {
+        "file": "vulnguard/data/context_gatherer.py",
+        "functions": 10,
+        "flagged": 9
+      },
+      {
+        "file": "vulnguard/data/feature_extractor.py",
+        "functions": 14,
+        "flagged": 10
+      },
+      {
+        "file": "vulnguard/data/fetch_dataset.py",
+        "functions": 7,
+        "flagged": 5
+      },
+      {
+        "file": "vulnguard/data/parser.py",
+        "functions": 14,
+        "flagged": 12
+      },
+      {
+        "file": "vulnguard/models/retriever.py",
+        "functions": 9,
+        "flagged": 7
+      },
+      {
+        "file": "vulnguard/models/risk_scorer.py",
+        "functions": 7,
+        "flagged": 5
+      },
+      {
+        "file": "vulnguard/models/train_classifier.py",
+        "functions": 3,
+        "flagged": 2
+      },
+      {
+        "file": "vulnguard/sandbox/docker_runner.py",
+        "functions": 16,
+        "flagged": 12
+      },
+      {
+        "file": "vulnguard/sandbox/patcher.py",
+        "functions": 4,
+        "flagged": 3
+      },
+      {
+        "file": "vulnguard/ui/server.py",
+        "functions": 23,
+        "flagged": 19
+      },
+      {
+        "file": "vulnguard/ui/store.py",
+        "functions": 8,
+        "flagged": 8
+      }
+    ]
+  },
+  "measured_at": "2026-10-28T15:57:16+0530"
+}

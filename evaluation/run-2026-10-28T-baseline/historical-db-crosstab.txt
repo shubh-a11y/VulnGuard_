@@ -1,0 +1,14 @@
+status='ERROR'              verdict=''                        vuln_found=0 count=45
+status='COMPLETE'           verdict=''                        vuln_found=0 count=28
+status='RED_PARSE_ERROR'    verdict=''                        vuln_found=0 count=8
+status='COMPLETE'           verdict='PASS'                    vuln_found=1 count=5
+status='DISCONNECTED'       verdict=''                        vuln_found=0 count=3
+status='TRIAGE'             verdict=''                        vuln_found=0 count=1
+status='FAILED'             verdict='EXPLOIT_NOT_REPRODUCED'  vuln_found=1 count=1
+status='COMPLETE'           verdict='SANDBOX_UNAVAILABLE'     vuln_found=1 count=1
+
+timestamp keys seen: {'red_end': 25, 'blue_end': 7, 'judge_end': 7}
+scans with red_report: 25
+scans with patched_code: 7
+scans with attempt_history: 0
+scans with usage/token fields: 0

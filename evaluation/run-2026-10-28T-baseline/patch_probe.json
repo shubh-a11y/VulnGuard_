@@ -1,0 +1,94 @@
+{
+  "cases": [
+    {
+      "case_id": "C01",
+      "relative_path": "data/test_vulns/vuln_sqli.py",
+      "language": "python",
+      "has_patch": true,
+      "byte_span": [
+        18,
+        465
+      ],
+      "syntax_valid": true,
+      "syntax_error": null,
+      "applied": false,
+      "apply_error": "NameError: name 'time' is not defined",
+      "file_changed": false,
+      "traceback_tail": "NameError: name 'time' is not defined. Did you forget to import 'time'"
+    },
+    {
+      "case_id": "C02",
+      "relative_path": "data/test_vulns/vuln_cmdi.py",
+      "language": "python",
+      "has_patch": true,
+      "byte_span": [
+        13,
+        378
+      ],
+      "syntax_valid": true,
+      "syntax_error": null,
+      "applied": false,
+      "apply_error": "NameError: name 'time' is not defined",
+      "file_changed": false,
+      "traceback_tail": "NameError: name 'time' is not defined. Did you forget to import 'time'"
+    },
+    {
+      "case_id": "C03",
+      "relative_path": "data/test_vulns/vuln_buffer.c",
+      "language": "c",
+      "has_patch": true,
+      "byte_span": [
+        43,
+        341
+      ],
+      "syntax_valid": true,
+      "syntax_error": null,
+      "applied": false,
+      "apply_error": "NameError: name 'time' is not defined",
+      "file_changed": false,
+      "traceback_tail": "NameError: name 'time' is not defined. Did you forget to import 'time'"
+    },
+    {
+      "case_id": "C04",
+      "relative_path": "data/test_vulns/vuln_format.c",
+      "language": "c",
+      "has_patch": true,
+      "byte_span": [
+        43,
+        340
+      ],
+      "syntax_valid": true,
+      "syntax_error": null,
+      "applied": false,
+      "apply_error": "NameError: name 'time' is not defined",
+      "file_changed": false,
+      "traceback_tail": "NameError: name 'time' is not defined. Did you forget to import 'time'"
+    },
+    {
+      "case_id": "C05",
+      "relative_path": "data/test_vulns/vuln_race.c",
+      "language": "c",
+      "has_patch": true,
+      "byte_span": [
+        84,
+        904
+      ],
+      "syntax_valid": true,
+      "syntax_error": null,
+      "applied": false,
+      "apply_error": "NameError: name 'time' is not defined",
+      "file_changed": false,
+      "traceback_tail": "NameError: name 'time' is not defined. Did you forget to import 'time'"
+    },
+    {
+      "case_id": "C06",
+      "relative_path": "data/test_vulns/vuln_taint_flow/input_handler.py",
+      "language": "python",
+      "has_patch": false
+    }
+  ],
+  "patches_generated": 5,
+  "syntactically_valid": 5,
+  "applications_attempted": 5,
+  "applications_succeeded": 0
+}

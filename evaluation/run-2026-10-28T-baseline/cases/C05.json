@@ -1,0 +1,144 @@
+{
+  "case_id": "C05",
+  "relative_path": "data/test_vulns/vuln_race.c",
+  "function": "write_secure_log",
+  "language": "c",
+  "triage": {
+    "risk_score": 30.0,
+    "bypass_reason": "STATIC_SIGNAL:TOCTOU_FILE_ACCESS",
+    "parse_errors": []
+  },
+  "start_byte": 84,
+  "end_byte": 904,
+  "started_wall": 1793182712.2480617,
+  "finished_wall": 1793182823.6630714,
+  "elapsed_seconds": 111.415,
+  "exception": null,
+  "usage": {
+    "calls": 6,
+    "input_tokens": 5916,
+    "output_tokens": 9745,
+    "total_tokens": 15661,
+    "cost_usd": 0.128772,
+    "models": [
+      "gemini-3.1-pro-preview"
+    ],
+    "records": [
+      {
+        "timestamp": "2026-10-28T10:19:00.994685+00:00",
+        "provider": "gemini",
+        "model": "gemini-3.1-pro-preview",
+        "input_tokens": 842,
+        "output_tokens": 1010,
+        "reasoning_tokens": 0,
+        "total_tokens": 1852,
+        "estimated_cost_usd": 0.013804,
+        "latency_ms": 14441.962
+      },
+      {
+        "timestamp": "2026-10-28T10:19:14.703545+00:00",
+        "provider": "gemini",
+        "model": "gemini-3.1-pro-preview",
+        "input_tokens": 842,
+        "output_tokens": 1216,
+        "reasoning_tokens": 0,
+        "total_tokens": 2058,
+        "estimated_cost_usd": 0.016276000000000002,
+        "latency_ms": 13707.283
+      },
+      {
+        "timestamp": "2026-10-28T10:19:26.526301+00:00",
+        "provider": "gemini",
+        "model": "gemini-3.1-pro-preview",
+        "input_tokens": 788,
+        "output_tokens": 790,
+        "reasoning_tokens": 0,
+        "total_tokens": 1578,
+        "estimated_cost_usd": 0.011056,
+        "latency_ms": 11817.259
+      },
+      {
+        "timestamp": "2026-10-28T10:19:37.439484+00:00",
+        "provider": "gemini",
+        "model": "gemini-3.1-pro-preview",
+        "input_tokens": 1148,
+        "output_tokens": 1010,
+        "reasoning_tokens": 0,
+        "total_tokens": 2158,
+        "estimated_cost_usd": 0.014416,
+        "latency_ms": 10894.411
+      },
+      {
+        "timestamp": "2026-10-28T10:19:54.954006+00:00",
+        "provider": "gemini",
+        "model": "gemini-3.1-pro-preview",
+        "input_tokens": 1148,
+        "output_tokens": 2034,
+        "reasoning_tokens": 0,
+        "total_tokens": 3182,
+        "estimated_cost_usd": 0.026704,
+        "latency_ms": 17512.274
+      },
+      {
+        "timestamp": "2026-10-28T10:20:23.656959+00:00",
+        "provider": "gemini",
+        "model": "gemini-3.1-pro-preview",
+        "input_tokens": 1148,
+        "output_tokens": 3685,
+        "reasoning_tokens": 0,
+        "total_tokens": 4833,
+        "estimated_cost_usd": 0.046516,
+        "latency_ms": 28700.361
+      }
+    ]
+  },
+  "final_state": {
+    "function_id": "data/test_vulns/vuln_race.c:write_secure_log",
+    "language": "c",
+    "risk_score": 30.0,
+    "file_path": "C:\\Users\\singh\\OneDrive\\Desktop\\AI Projects\\VulnGuard\\data\\test_vulns\\vuln_race.c",
+    "repo_root": "C:\\Users\\singh\\OneDrive\\Desktop\\AI Projects\\VulnGuard\\data\\test_vulns",
+    "start_byte": 84,
+    "end_byte": 904,
+    "red_report": {
+      "vulnerability_found": true,
+      "vulnerability_type": "TOCTOU",
+      "cwe_id": "CWE-367",
+      "severity": "HIGH",
+      "affected_lines": [
+        5,
+        15
+      ],
+      "explanation": "The function contains a Time-of-Check to Time-of-Use (TOCTOU) race condition. It uses access() to verify write permissions on a file path, followed by open() to write to it. Because these are two separate system calls, an attacker can replace the legitimate file with a symbolic link pointing to a sensitive file during the time window between the check and the use. If the program runs with elevated privileges, the open() call will follow the symlink and write the attacker-controlled message to the restricted file, bypassing the intended access controls.",
+      "confidence": 1.0,
+      "exploit_type": null,
+      "exploit_code_harness": null,
+      "expected_stdout_regex": null
+    },
+    "vulnerability_found": true,
+    "exploit_status": "INVALID",
+    "exploit_error": "the model did not provide an exploit harness",
+    "exploit_harness": null,
+    "exploit_type": null,
+    "expected_stdout_regex": null,
+    "patched_code": "void write_secure_log(const char *filename, const char *msg) {\n    if (access(filename, W_OK) != 0) {\n        printf(\"Access denied to %s\\n\", filename);\n        return;\n    }\n    \n    int fd = open(filename, O_WRONLY | O_APPEND | O_NOFOLLOW);\n    if (fd == -1) {\n        perror(\"open\");\n        return;\n    }\n    \n    write(fd, msg, strlen(msg));\n    close(fd);\n    printf(\"Log written securely.\\n\");\n}",
+    "patch_justification": "Adding the `O_NOFOLLOW` flag ensures that `open()` will fail if the target file is a symbolic link. This directly mitigates the Time-of-Check to Time-of-Use (TOCTOU) race condition where an attacker swaps the legitimate file for a symlink pointing to a sensitive file (like `/etc/shadow`) between the `access()` check and the `open()` call.",
+    "patch_diff": "--- original\n+++ patched\n@@ -1,18 +1,10 @@\n void write_secure_log(const char *filename, const char *msg) {\n-    // VULNERABILITY: TOCTOU (Time of Check to Time of Use) Race Condition\n-    // \n-    // Step 1: Check if the user has access to write to the file\n     if (access(filename, W_OK) != 0) {\n         printf(\"Access denied to %s\\n\", filename);\n         return;\n     }\n     \n-    // --> WINDOW OF VULNERABILITY <--\n-    // An attacker can swap `filename` from a legitimate file to a symlink\n-    // pointing to /etc/shadow during this brief window.\n-    \n-    // Step 2: Open and write to the file (assuming the check above is still valid)\n-    int fd = open(filename, O_WRONLY | O_APPEND);\n+    int fd = open(filename, O_WRONLY | O_APPEND | O_NOFOLLOW);\n     if (fd == -1) {\n         perror(\"open\");\n         return;",
+    "build_success": true,
+    "test_success": true,
+    "exploit_blocked": false,
+    "judge_verdict": "EXPLOIT_INVALID",
+    "error_logs": "The proof of concept for this finding was invalid, so the patch could not be validated. the model did not provide an exploit harness",
+    "attempt_number": 0,
+    "attempt_history": [],
+    "max_attempts": 3,
+    "pipeline_status": "FAILED",
+    "timestamps": {
+      "pipeline_start": 1793182712.2480617,
+      "red_end": 1793182766.5294173,
+      "blue_end": 1793182766.532422,
+      "judge_end": 1793182823.661053,
+      "pipeline_end": 1793182823.6620204
+    }
+  }
+}

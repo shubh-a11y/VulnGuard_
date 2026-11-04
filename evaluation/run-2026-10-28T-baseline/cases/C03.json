@@ -1,0 +1,154 @@
+{
+  "case_id": "C03",
+  "relative_path": "data/test_vulns/vuln_buffer.c",
+  "function": "process_data",
+  "language": "c",
+  "triage": {
+    "risk_score": 71.3,
+    "bypass_reason": "STATIC_SIGNAL:UNBOUNDED_C_API",
+    "parse_errors": []
+  },
+  "start_byte": 43,
+  "end_byte": 341,
+  "started_wall": 1793182460.5486746,
+  "finished_wall": 1793182599.1044848,
+  "elapsed_seconds": 138.556,
+  "exception": null,
+  "usage": {
+    "calls": 7,
+    "input_tokens": 4917,
+    "output_tokens": 10729,
+    "total_tokens": 15646,
+    "cost_usd": 0.138582,
+    "models": [
+      "gemini-3.1-pro-preview"
+    ],
+    "records": [
+      {
+        "timestamp": "2026-10-28T10:14:49.026153+00:00",
+        "provider": "gemini",
+        "model": "gemini-3.1-pro-preview",
+        "input_tokens": 670,
+        "output_tokens": 1010,
+        "reasoning_tokens": 0,
+        "total_tokens": 1680,
+        "estimated_cost_usd": 0.01346,
+        "latency_ms": 15268.739
+      },
+      {
+        "timestamp": "2026-10-28T10:15:06.945951+00:00",
+        "provider": "gemini",
+        "model": "gemini-3.1-pro-preview",
+        "input_tokens": 670,
+        "output_tokens": 1880,
+        "reasoning_tokens": 0,
+        "total_tokens": 2550,
+        "estimated_cost_usd": 0.0239,
+        "latency_ms": 17916.488
+      },
+      {
+        "timestamp": "2026-10-28T10:15:21.880902+00:00",
+        "provider": "gemini",
+        "model": "gemini-3.1-pro-preview",
+        "input_tokens": 571,
+        "output_tokens": 1010,
+        "reasoning_tokens": 0,
+        "total_tokens": 1581,
+        "estimated_cost_usd": 0.013262000000000001,
+        "latency_ms": 14931.431
+      },
+      {
+        "timestamp": "2026-10-28T10:15:42.785335+00:00",
+        "provider": "gemini",
+        "model": "gemini-3.1-pro-preview",
+        "input_tokens": 571,
+        "output_tokens": 2034,
+        "reasoning_tokens": 0,
+        "total_tokens": 2605,
+        "estimated_cost_usd": 0.02555,
+        "latency_ms": 20903.582
+      },
+      {
+        "timestamp": "2026-10-28T10:16:12.999906+00:00",
+        "provider": "gemini",
+        "model": "gemini-3.1-pro-preview",
+        "input_tokens": 571,
+        "output_tokens": 2978,
+        "reasoning_tokens": 0,
+        "total_tokens": 3549,
+        "estimated_cost_usd": 0.036878,
+        "latency_ms": 30210.11
+      },
+      {
+        "timestamp": "2026-10-28T10:16:21.319618+00:00",
+        "provider": "gemini",
+        "model": "gemini-3.1-pro-preview",
+        "input_tokens": 932,
+        "output_tokens": 1010,
+        "reasoning_tokens": 0,
+        "total_tokens": 1942,
+        "estimated_cost_usd": 0.013984,
+        "latency_ms": 8300.268
+      },
+      {
+        "timestamp": "2026-10-28T10:16:28.584379+00:00",
+        "provider": "gemini",
+        "model": "gemini-3.1-pro-preview",
+        "input_tokens": 932,
+        "output_tokens": 807,
+        "reasoning_tokens": 0,
+        "total_tokens": 1739,
+        "estimated_cost_usd": 0.011548,
+        "latency_ms": 7263.106
+      }
+    ]
+  },
+  "final_state": {
+    "function_id": "data/test_vulns/vuln_buffer.c:process_data",
+    "language": "c",
+    "risk_score": 71.3,
+    "file_path": "C:\\Users\\singh\\OneDrive\\Desktop\\AI Projects\\VulnGuard\\data\\test_vulns\\vuln_buffer.c",
+    "repo_root": "C:\\Users\\singh\\OneDrive\\Desktop\\AI Projects\\VulnGuard\\data\\test_vulns",
+    "start_byte": 43,
+    "end_byte": 341,
+    "red_report": {
+      "vulnerability_found": true,
+      "vulnerability_type": "BUFFER_OVERFLOW",
+      "cwe_id": "CWE-121",
+      "severity": "CRITICAL",
+      "affected_lines": [
+        6
+      ],
+      "explanation": "The function uses strcpy to copy an unbounded input string into a fixed-size 64-byte stack buffer. Because strcpy does not perform bounds checking, providing an input string longer than 63 characters will cause a stack-based buffer overflow. This memory corruption can overwrite adjacent stack data, including the saved return address, potentially leading to arbitrary code execution.",
+      "confidence": 1.0,
+      "exploit_type": "c_harness",
+      "exploit_code_harness": "#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n#include <signal.h>\n\nextern void process_data(char *input);\n\nvoid crash_handler(int signum) {\n    printf(\"POC_SUCCESS_MARKER\\n\");\n    exit(0);\n}\n\nint main() {\n    // Register signal handlers to catch the crash caused by the buffer overflow\n    signal(SIGSEGV, crash_handler);\n    signal(SIGABRT, crash_handler);\n    signal(SIGILL, crash_handler);\n    \n    // Create a payload larger than the 64-byte buffer to trigger the overflow\n    char payload[256];\n    memset(payload, 'A', 255);\n    payload[255] = '\\0';\n    \n    // Invoke the target function\n    process_data(payload);\n    \n    return 0;\n}",
+      "expected_stdout_regex": "POC_SUCCESS_MARKER"
+    },
+    "vulnerability_found": true,
+    "exploit_status": "AVAILABLE",
+    "exploit_error": null,
+    "exploit_harness": "#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n#include <signal.h>\n\nextern void process_data(char *input);\n\nvoid crash_handler(int signum) {\n    printf(\"POC_SUCCESS_MARKER\\n\");\n    exit(0);\n}\n\nint main() {\n    // Register signal handlers to catch the crash caused by the buffer overflow\n    signal(SIGSEGV, crash_handler);\n    signal(SIGABRT, crash_handler);\n    signal(SIGILL, crash_handler);\n    \n    // Create a payload larger than the 64-byte buffer to trigger the overflow\n    char payload[256];\n    memset(payload, 'A', 255);\n    payload[255] = '\\0';\n    \n    // Invoke the target function\n    process_data(payload);\n    \n    return 0;\n}",
+    "exploit_type": "c_harness",
+    "expected_stdout_regex": "POC_SUCCESS_MARKER",
+    "patched_code": "void process_data(char *input) {\n    char buffer[64];\n    \n    // VULNERABILITY: Classic buffer overflow. strcpy does not check bounds.\n    // If input is > 64 bytes, it will overwrite the return address on the stack.\n    strncpy(buffer, input, sizeof(buffer) - 1);\n    buffer[sizeof(buffer) - 1] = '\\0';\n    \n    printf(\"Processed: %s\\n\", buffer);\n}",
+    "patch_justification": "Using `strncpy` with a limit of `sizeof(buffer) - 1` ensures that the copy operation will not write past the end of the fixed-size buffer. Explicitly setting the last byte to `\\0` guarantees that the string is properly null-terminated even if the input string is longer than the buffer, preventing out-of-bounds reads during the subsequent `printf` call.",
+    "patch_diff": "--- original\n+++ patched\n@@ -3,7 +3,8 @@\n     \n     // VULNERABILITY: Classic buffer overflow. strcpy does not check bounds.\n     // If input is > 64 bytes, it will overwrite the return address on the stack.\n-    strcpy(buffer, input);\n+    strncpy(buffer, input, sizeof(buffer) - 1);\n+    buffer[sizeof(buffer) - 1] = '\\0';\n     \n     printf(\"Processed: %s\\n\", buffer);\n }",
+    "build_success": true,
+    "test_success": true,
+    "exploit_blocked": true,
+    "judge_verdict": "PASS",
+    "error_logs": "",
+    "attempt_number": 0,
+    "attempt_history": [],
+    "max_attempts": 3,
+    "pipeline_status": "COMPLETE",
+    "timestamps": {
+      "pipeline_start": 1793182460.5486746,
+      "red_end": 1793182573.0028906,
+      "blue_end": 1793182573.0048923,
+      "judge_end": 1793182599.1032503,
+      "pipeline_end": 1793182599.1044848
+    }
+  }
+}

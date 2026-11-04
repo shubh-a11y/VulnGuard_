@@ -1,0 +1,41 @@
+@import "tailwindcss";
+
+@theme {
+  --color-vuln-red: #ef4444;
+  --color-vuln-blue: #3b82f6;
+  --color-vuln-judge: #eab308;
+  --color-dark-bg: #09090b; /* Deep obsidian */
+  --color-dark-surface: #0a0a0a;
+  --color-dark-border: rgba(255, 255, 255, 0.1);
+  --color-gold: #f59e0b;
+  
+  --animate-spotlight: spotlight 2s ease .75s 1 forwards;
+}
+
+@keyframes spotlight {
+  0% {
+    opacity: 0;
+    transform: translate(-72%, -62%) scale(0.5);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(-50%,-40%) scale(1);
+  }
+}
+
+@layer base {
+  :root {
+    --background: #09090b;
+    --foreground: #ffffff;
+  }
+
+  body {
+    @apply bg-dark-bg text-white antialiased selection:bg-white/30;
+  }
+}
+
+@layer utilities {
+  .glassmorphism {
+    @apply bg-neutral-900/60 backdrop-blur-xl border border-white/10 shadow-2xl;
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "vulnguard-sandbox": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "-v",
+        ":/app",
+        "node:20-alpine",
+        "sh"
+      ],
+      "description": "Isolated execution sandbox for the Judge Agent to run verification tests and compilation checks."
+    }
+  }
+}

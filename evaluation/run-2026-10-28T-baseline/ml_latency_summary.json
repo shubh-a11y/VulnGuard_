@@ -1,0 +1,28 @@
+{
+  "procedure": "RiskScorer.score(function_source, language) from a fresh interpreter; 25 repetitions per function after one warm-up call, 6 labeled functions, 150 samples per run",
+  "hardware_context": "same host, sequential runs, no other load reported",
+  "runs": {
+    "run0_cold_first": {
+      "median": 5.822,
+      "mean": 8.164,
+      "p95": 20.233
+    },
+    "run1": {
+      "median": 2.773,
+      "mean": 5.253,
+      "p95": 18.799
+    },
+    "run2": {
+      "median": 2.269,
+      "mean": 2.662,
+      "p95": 5.316
+    },
+    "run3": {
+      "median": 2.12,
+      "mean": 2.36,
+      "p95": 3.786
+    }
+  },
+  "median_of_run_medians_ms": 3.246,
+  "note": "The first run of a process is slower (XGBoost artifact load + first tree-sitter parse per language); steady-state medians are ~2.1-2.8 ms per function."
+}
