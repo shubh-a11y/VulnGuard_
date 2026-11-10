@@ -1,0 +1,699 @@
+{
+  "timestamp": "2026-11-07T11:45:04Z",
+  "total_cases": 30,
+  "valid_cases": 30,
+  "invalid_cases": 0,
+  "all_benchmarks_valid": true,
+  "cases": [
+    {
+      "case_id": "B01",
+      "category": "SQL Injection",
+      "cwe": "CWE-89",
+      "ground_truth": "vulnerable",
+      "source_path": "evaluation/dataset/vulnerable/sql/sqli_01.py",
+      "target_function": "get_user",
+      "validation_status": "VALID",
+      "security_test": {
+        "passed": true,
+        "vulnerability_demonstrated": true,
+        "expected_demonstration": true,
+        "is_valid": true,
+        "evidence": "get_user returned 2 rows: [(1, 'alice', 'user'), (2, 'admin', 'admin')]",
+        "error": null
+      },
+      "regression_test": {
+        "passed": true,
+        "evidence": "Returned [(1, 'alice', 'user')]",
+        "error": null
+      },
+      "elapsed_seconds": 0.0972
+    },
+    {
+      "case_id": "B02",
+      "category": "SQL Injection",
+      "cwe": "CWE-89",
+      "ground_truth": "vulnerable",
+      "source_path": "evaluation/dataset/vulnerable/sql/sqli_02.py",
+      "target_function": "search_products",
+      "validation_status": "VALID",
+      "security_test": {
+        "passed": true,
+        "vulnerability_demonstrated": true,
+        "expected_demonstration": true,
+        "is_valid": true,
+        "evidence": "search_products returned 2 rows: [(1, 'Book A', 'books', 15.0), (2, 'Laptop', 'electronics', 999.0)]",
+        "error": null
+      },
+      "regression_test": {
+        "passed": true,
+        "evidence": "Returned [(1, 'Book A', 'books', 15.0)]",
+        "error": null
+      },
+      "elapsed_seconds": 0.0755
+    },
+    {
+      "case_id": "B03",
+      "category": "SQL Injection",
+      "cwe": "CWE-89",
+      "ground_truth": "vulnerable",
+      "source_path": "evaluation/dataset/vulnerable/sql/sqli_03.py",
+      "target_function": "filter_orders",
+      "validation_status": "VALID",
+      "security_test": {
+        "passed": true,
+        "vulnerability_demonstrated": true,
+        "expected_demonstration": true,
+        "is_valid": true,
+        "evidence": "filter_orders returned 2 rows: [(1, 'alice', 'completed', 50.0), (2, 'bob', 'cancelled', 100.0)]",
+        "error": null
+      },
+      "regression_test": {
+        "passed": true,
+        "evidence": "Returned [(1, 'alice', 'completed', 50.0)]",
+        "error": null
+      },
+      "elapsed_seconds": 0.075
+    },
+    {
+      "case_id": "B04",
+      "category": "SQL Injection",
+      "cwe": "CWE-89",
+      "ground_truth": "safe",
+      "source_path": "evaluation/dataset/safe/sql/safe_sql_01.py",
+      "target_function": "get_user",
+      "validation_status": "VALID",
+      "security_test": {
+        "passed": true,
+        "vulnerability_demonstrated": false,
+        "expected_demonstration": false,
+        "is_valid": true,
+        "evidence": "get_user returned 0 rows: []",
+        "error": null
+      },
+      "regression_test": {
+        "passed": true,
+        "evidence": "Returned [(1, 'alice', 'user')]",
+        "error": null
+      },
+      "elapsed_seconds": 0.0724
+    },
+    {
+      "case_id": "B05",
+      "category": "SQL Injection",
+      "cwe": "CWE-89",
+      "ground_truth": "safe",
+      "source_path": "evaluation/dataset/safe/sql/safe_sql_02.py",
+      "target_function": "search_products",
+      "validation_status": "VALID",
+      "security_test": {
+        "passed": true,
+        "vulnerability_demonstrated": false,
+        "expected_demonstration": false,
+        "is_valid": true,
+        "evidence": "search_products returned 0 rows: []",
+        "error": null
+      },
+      "regression_test": {
+        "passed": true,
+        "evidence": "Returned [(1, 'Book A', 'books', 15.0)]",
+        "error": null
+      },
+      "elapsed_seconds": 0.0786
+    },
+    {
+      "case_id": "B06",
+      "category": "SQL Injection",
+      "cwe": "CWE-89",
+      "ground_truth": "safe",
+      "source_path": "evaluation/dataset/safe/sql/safe_sql_03.py",
+      "target_function": "filter_orders",
+      "validation_status": "VALID",
+      "security_test": {
+        "passed": true,
+        "vulnerability_demonstrated": false,
+        "expected_demonstration": false,
+        "is_valid": true,
+        "evidence": "filter_orders rejected injection with ValueError: Invalid status filter: ' OR '1'='1",
+        "error": null
+      },
+      "regression_test": {
+        "passed": true,
+        "evidence": "Returned [(1, 'alice', 'completed', 50.0)]",
+        "error": null
+      },
+      "elapsed_seconds": 0.0666
+    },
+    {
+      "case_id": "B07",
+      "category": "Command Injection",
+      "cwe": "CWE-78",
+      "ground_truth": "vulnerable",
+      "source_path": "evaluation/dataset/vulnerable/command/cmdi_01.py",
+      "target_function": "ping_host",
+      "validation_status": "VALID",
+      "security_test": {
+        "passed": true,
+        "vulnerability_demonstrated": true,
+        "expected_demonstration": true,
+        "is_valid": true,
+        "evidence": "Canary file created: True",
+        "error": null
+      },
+      "regression_test": {
+        "passed": true,
+        "evidence": "ping returncode: 0",
+        "error": null
+      },
+      "elapsed_seconds": 0.6795
+    },
+    {
+      "case_id": "B08",
+      "category": "Command Injection",
+      "cwe": "CWE-78",
+      "ground_truth": "vulnerable",
+      "source_path": "evaluation/dataset/vulnerable/command/cmdi_02.py",
+      "target_function": "count_lines",
+      "validation_status": "VALID",
+      "security_test": {
+        "passed": true,
+        "vulnerability_demonstrated": true,
+        "expected_demonstration": true,
+        "is_valid": true,
+        "evidence": "Canary file created: True",
+        "error": null
+      },
+      "regression_test": {
+        "passed": true,
+        "evidence": "check_service returned: status for service: web_server",
+        "error": null
+      },
+      "elapsed_seconds": 0.2438
+    },
+    {
+      "case_id": "B09",
+      "category": "Command Injection",
+      "cwe": "CWE-78",
+      "ground_truth": "vulnerable",
+      "source_path": "evaluation/dataset/vulnerable/command/cmdi_03.py",
+      "target_function": "run_backup",
+      "validation_status": "VALID",
+      "security_test": {
+        "passed": true,
+        "vulnerability_demonstrated": true,
+        "expected_demonstration": true,
+        "is_valid": true,
+        "evidence": "Canary file created: True",
+        "error": null
+      },
+      "regression_test": {
+        "passed": true,
+        "evidence": "execute_diagnostic returned: Running diagnostic on node1",
+        "error": null
+      },
+      "elapsed_seconds": 0.2012
+    },
+    {
+      "case_id": "B10",
+      "category": "Command Injection",
+      "cwe": "CWE-78",
+      "ground_truth": "safe",
+      "source_path": "evaluation/dataset/safe/command/safe_cmd_01.py",
+      "target_function": "ping_host",
+      "validation_status": "VALID",
+      "security_test": {
+        "passed": true,
+        "vulnerability_demonstrated": false,
+        "expected_demonstration": false,
+        "is_valid": true,
+        "evidence": "Canary file created: False",
+        "error": null
+      },
+      "regression_test": {
+        "passed": true,
+        "evidence": "ping returncode: 0",
+        "error": null
+      },
+      "elapsed_seconds": 0.0968
+    },
+    {
+      "case_id": "B11",
+      "category": "Command Injection",
+      "cwe": "CWE-78",
+      "ground_truth": "safe",
+      "source_path": "evaluation/dataset/safe/command/safe_cmd_02.py",
+      "target_function": "count_lines",
+      "validation_status": "VALID",
+      "security_test": {
+        "passed": true,
+        "vulnerability_demonstrated": false,
+        "expected_demonstration": false,
+        "is_valid": true,
+        "evidence": "Canary file created: False",
+        "error": null
+      },
+      "regression_test": {
+        "passed": true,
+        "evidence": "check_service returned: status for service: web_server",
+        "error": null
+      },
+      "elapsed_seconds": 0.0215
+    },
+    {
+      "case_id": "B12",
+      "category": "Command Injection",
+      "cwe": "CWE-78",
+      "ground_truth": "safe",
+      "source_path": "evaluation/dataset/safe/command/safe_cmd_03.py",
+      "target_function": "run_backup",
+      "validation_status": "VALID",
+      "security_test": {
+        "passed": true,
+        "vulnerability_demonstrated": false,
+        "expected_demonstration": false,
+        "is_valid": true,
+        "evidence": "Canary file created: False",
+        "error": null
+      },
+      "regression_test": {
+        "passed": true,
+        "evidence": "execute_diagnostic returned: Running diagnostic on node1",
+        "error": null
+      },
+      "elapsed_seconds": 0.0215
+    },
+    {
+      "case_id": "B13",
+      "category": "Path Traversal",
+      "cwe": "CWE-22",
+      "ground_truth": "vulnerable",
+      "source_path": "evaluation/dataset/vulnerable/path/path_01.py",
+      "target_function": "read_user_file",
+      "validation_status": "VALID",
+      "security_test": {
+        "passed": true,
+        "vulnerability_demonstrated": true,
+        "expected_demonstration": true,
+        "is_valid": true,
+        "evidence": "Read secret: CANARY_SECRET_DATA_TRAVERSAL_CONFIRMED",
+        "error": null
+      },
+      "regression_test": {
+        "passed": true,
+        "evidence": "Read VALID_FILE_CONTENT",
+        "error": null
+      },
+      "elapsed_seconds": 0.0382
+    },
+    {
+      "case_id": "B14",
+      "category": "Path Traversal",
+      "cwe": "CWE-22",
+      "ground_truth": "vulnerable",
+      "source_path": "evaluation/dataset/vulnerable/path/path_02.py",
+      "target_function": "fetch_document",
+      "validation_status": "VALID",
+      "security_test": {
+        "passed": true,
+        "vulnerability_demonstrated": true,
+        "expected_demonstration": true,
+        "is_valid": true,
+        "evidence": "Read secret: CANARY_SECRET_DATA_TRAVERSAL_CONFIRMED",
+        "error": null
+      },
+      "regression_test": {
+        "passed": true,
+        "evidence": "Read VALID_FILE_CONTENT",
+        "error": null
+      },
+      "elapsed_seconds": 0.0394
+    },
+    {
+      "case_id": "B15",
+      "category": "Path Traversal",
+      "cwe": "CWE-22",
+      "ground_truth": "vulnerable",
+      "source_path": "evaluation/dataset/vulnerable/path/path_03.c",
+      "target_function": "load_profile",
+      "validation_status": "VALID",
+      "security_test": {
+        "passed": true,
+        "vulnerability_demonstrated": true,
+        "expected_demonstration": true,
+        "is_valid": true,
+        "evidence": "stdout=CANARY_SECRET_DATA_TRAVERSAL_CONFIRMED, exit=0",
+        "error": null
+      },
+      "regression_test": {
+        "passed": true,
+        "evidence": "VALID_FILE_CONTENT",
+        "error": null
+      },
+      "elapsed_seconds": 3.2711
+    },
+    {
+      "case_id": "B16",
+      "category": "Path Traversal",
+      "cwe": "CWE-22",
+      "ground_truth": "safe",
+      "source_path": "evaluation/dataset/safe/path/safe_path_01.py",
+      "target_function": "read_user_file",
+      "validation_status": "VALID",
+      "security_test": {
+        "passed": true,
+        "vulnerability_demonstrated": false,
+        "expected_demonstration": false,
+        "is_valid": true,
+        "evidence": "PermissionError correctly raised",
+        "error": null
+      },
+      "regression_test": {
+        "passed": true,
+        "evidence": "Read VALID_FILE_CONTENT",
+        "error": null
+      },
+      "elapsed_seconds": 0.3122
+    },
+    {
+      "case_id": "B17",
+      "category": "Path Traversal",
+      "cwe": "CWE-22",
+      "ground_truth": "safe",
+      "source_path": "evaluation/dataset/safe/path/safe_path_02.py",
+      "target_function": "fetch_document",
+      "validation_status": "VALID",
+      "security_test": {
+        "passed": true,
+        "vulnerability_demonstrated": false,
+        "expected_demonstration": false,
+        "is_valid": true,
+        "evidence": "PermissionError correctly raised",
+        "error": null
+      },
+      "regression_test": {
+        "passed": true,
+        "evidence": "Read VALID_FILE_CONTENT",
+        "error": null
+      },
+      "elapsed_seconds": 0.2255
+    },
+    {
+      "case_id": "B18",
+      "category": "Path Traversal",
+      "cwe": "CWE-22",
+      "ground_truth": "safe",
+      "source_path": "evaluation/dataset/safe/path/safe_path_03.c",
+      "target_function": "load_profile",
+      "validation_status": "VALID",
+      "security_test": {
+        "passed": true,
+        "vulnerability_demonstrated": false,
+        "expected_demonstration": false,
+        "is_valid": true,
+        "evidence": "stdout=, exit=2",
+        "error": null
+      },
+      "regression_test": {
+        "passed": true,
+        "evidence": "VALID_FILE_CONTENT",
+        "error": null
+      },
+      "elapsed_seconds": 2.6319
+    },
+    {
+      "case_id": "B19",
+      "category": "Buffer Handling",
+      "cwe": "CWE-120",
+      "ground_truth": "vulnerable",
+      "source_path": "evaluation/dataset/vulnerable/memory/mem_01.c",
+      "target_function": "process_data",
+      "validation_status": "VALID",
+      "security_test": {
+        "passed": true,
+        "vulnerability_demonstrated": true,
+        "expected_demonstration": true,
+        "is_valid": true,
+        "evidence": "Process hung on buffer overflow",
+        "error": null
+      },
+      "regression_test": {
+        "passed": true,
+        "evidence": "stdout=Processed: ValidInput",
+        "error": null
+      },
+      "elapsed_seconds": 7.7584
+    },
+    {
+      "case_id": "B20",
+      "category": "Buffer Handling",
+      "cwe": "CWE-120",
+      "ground_truth": "vulnerable",
+      "source_path": "evaluation/dataset/vulnerable/memory/mem_02.c",
+      "target_function": "concat_headers",
+      "validation_status": "VALID",
+      "security_test": {
+        "passed": true,
+        "vulnerability_demonstrated": true,
+        "expected_demonstration": true,
+        "is_valid": true,
+        "evidence": "Process hung on buffer overflow",
+        "error": null
+      },
+      "regression_test": {
+        "passed": true,
+        "evidence": "stdout=Result: Header: ValidInput",
+        "error": null
+      },
+      "elapsed_seconds": 7.4578
+    },
+    {
+      "case_id": "B21",
+      "category": "Buffer Handling",
+      "cwe": "CWE-120",
+      "ground_truth": "vulnerable",
+      "source_path": "evaluation/dataset/vulnerable/memory/mem_03.c",
+      "target_function": "format_record",
+      "validation_status": "VALID",
+      "security_test": {
+        "passed": true,
+        "vulnerability_demonstrated": true,
+        "expected_demonstration": true,
+        "is_valid": true,
+        "evidence": "Process hung on buffer overflow",
+        "error": null
+      },
+      "regression_test": {
+        "passed": true,
+        "evidence": "stdout=Record: ID:ValidInput",
+        "error": null
+      },
+      "elapsed_seconds": 7.8484
+    },
+    {
+      "case_id": "B22",
+      "category": "Buffer Handling",
+      "cwe": "CWE-120",
+      "ground_truth": "safe",
+      "source_path": "evaluation/dataset/safe/memory/safe_mem_01.c",
+      "target_function": "process_data",
+      "validation_status": "VALID",
+      "security_test": {
+        "passed": true,
+        "vulnerability_demonstrated": false,
+        "expected_demonstration": false,
+        "is_valid": true,
+        "evidence": "exit_code=0, stdout_len=75, stdout=Processed: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "error": null
+      },
+      "regression_test": {
+        "passed": true,
+        "evidence": "stdout=Processed: ValidInput",
+        "error": null
+      },
+      "elapsed_seconds": 2.7698
+    },
+    {
+      "case_id": "B23",
+      "category": "Buffer Handling",
+      "cwe": "CWE-120",
+      "ground_truth": "safe",
+      "source_path": "evaluation/dataset/safe/memory/safe_mem_02.c",
+      "target_function": "concat_headers",
+      "validation_status": "VALID",
+      "security_test": {
+        "passed": true,
+        "vulnerability_demonstrated": false,
+        "expected_demonstration": false,
+        "is_valid": true,
+        "evidence": "exit_code=0, stdout_len=72, stdout=Result: Header: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "error": null
+      },
+      "regression_test": {
+        "passed": true,
+        "evidence": "stdout=Result: Header: ValidInput",
+        "error": null
+      },
+      "elapsed_seconds": 2.7262
+    },
+    {
+      "case_id": "B24",
+      "category": "Buffer Handling",
+      "cwe": "CWE-120",
+      "ground_truth": "safe",
+      "source_path": "evaluation/dataset/safe/memory/safe_mem_03.c",
+      "target_function": "format_record",
+      "validation_status": "VALID",
+      "security_test": {
+        "passed": true,
+        "vulnerability_demonstrated": false,
+        "expected_demonstration": false,
+        "is_valid": true,
+        "evidence": "exit_code=0, stdout_len=72, stdout=Record: ID:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "error": null
+      },
+      "regression_test": {
+        "passed": true,
+        "evidence": "stdout=Record: ID:ValidInput",
+        "error": null
+      },
+      "elapsed_seconds": 2.9536
+    },
+    {
+      "case_id": "B25",
+      "category": "Format String",
+      "cwe": "CWE-134",
+      "ground_truth": "vulnerable",
+      "source_path": "evaluation/dataset/vulnerable/format/fmt_01.c",
+      "target_function": "log_message",
+      "validation_status": "VALID",
+      "security_test": {
+        "passed": true,
+        "vulnerability_demonstrated": true,
+        "expected_demonstration": true,
+        "is_valid": true,
+        "evidence": "output=d7fb58d8.fffffffe.60ff08.76b38c1d, literal_found=False, hex_leak=True",
+        "error": null
+      },
+      "regression_test": {
+        "passed": true,
+        "evidence": "output=HelloNormalLog",
+        "error": null
+      },
+      "elapsed_seconds": 2.7214
+    },
+    {
+      "case_id": "B26",
+      "category": "Format String",
+      "cwe": "CWE-134",
+      "ground_truth": "vulnerable",
+      "source_path": "evaluation/dataset/vulnerable/format/fmt_02.c",
+      "target_function": "report_error",
+      "validation_status": "VALID",
+      "security_test": {
+        "passed": true,
+        "vulnerability_demonstrated": true,
+        "expected_demonstration": true,
+        "is_valid": true,
+        "evidence": "output=fffffffe.60ff08.76b38c1d.401980, literal_found=False, hex_leak=True",
+        "error": null
+      },
+      "regression_test": {
+        "passed": true,
+        "evidence": "output=HelloNormalLog",
+        "error": null
+      },
+      "elapsed_seconds": 2.8589
+    },
+    {
+      "case_id": "B27",
+      "category": "Format String",
+      "cwe": "CWE-134",
+      "ground_truth": "vulnerable",
+      "source_path": "evaluation/dataset/vulnerable/format/fmt_03.c",
+      "target_function": "format_status",
+      "validation_status": "VALID",
+      "security_test": {
+        "passed": true,
+        "vulnerability_demonstrated": true,
+        "expected_demonstration": true,
+        "is_valid": true,
+        "evidence": "output=4012e0.fffffffe.0.60ff28, literal_found=False, hex_leak=True",
+        "error": null
+      },
+      "regression_test": {
+        "passed": true,
+        "evidence": "output=HelloNormalLog",
+        "error": null
+      },
+      "elapsed_seconds": 2.2653
+    },
+    {
+      "case_id": "B28",
+      "category": "Format String",
+      "cwe": "CWE-134",
+      "ground_truth": "safe",
+      "source_path": "evaluation/dataset/safe/format/safe_fmt_01.c",
+      "target_function": "log_message",
+      "validation_status": "VALID",
+      "security_test": {
+        "passed": true,
+        "vulnerability_demonstrated": false,
+        "expected_demonstration": false,
+        "is_valid": true,
+        "evidence": "output=%x.%x.%x.%x, literal_found=True, hex_leak=False",
+        "error": null
+      },
+      "regression_test": {
+        "passed": true,
+        "evidence": "output=HelloNormalLog",
+        "error": null
+      },
+      "elapsed_seconds": 2.4195
+    },
+    {
+      "case_id": "B29",
+      "category": "Format String",
+      "cwe": "CWE-134",
+      "ground_truth": "safe",
+      "source_path": "evaluation/dataset/safe/format/safe_fmt_02.c",
+      "target_function": "report_error",
+      "validation_status": "VALID",
+      "security_test": {
+        "passed": true,
+        "vulnerability_demonstrated": false,
+        "expected_demonstration": false,
+        "is_valid": true,
+        "evidence": "output=%x.%x.%x.%x, literal_found=True, hex_leak=False",
+        "error": null
+      },
+      "regression_test": {
+        "passed": true,
+        "evidence": "output=HelloNormalLog",
+        "error": null
+      },
+      "elapsed_seconds": 2.437
+    },
+    {
+      "case_id": "B30",
+      "category": "Format String",
+      "cwe": "CWE-134",
+      "ground_truth": "safe",
+      "source_path": "evaluation/dataset/safe/format/safe_fmt_03.c",
+      "target_function": "format_status",
+      "validation_status": "VALID",
+      "security_test": {
+        "passed": true,
+        "vulnerability_demonstrated": false,
+        "expected_demonstration": false,
+        "is_valid": true,
+        "evidence": "output=%x.%x.%x.%x, literal_found=True, hex_leak=False",
+        "error": null
+      },
+      "regression_test": {
+        "passed": true,
+        "evidence": "output=HelloNormalLog",
+        "error": null
+      },
+      "elapsed_seconds": 2.3031
+    }
+  ]
+}

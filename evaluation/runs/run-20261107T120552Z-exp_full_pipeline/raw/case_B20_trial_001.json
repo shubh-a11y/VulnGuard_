@@ -1,0 +1,66 @@
+{
+  "run_id": "run-20261107T120552Z-exp_full_pipeline",
+  "case_id": "B20",
+  "ground_truth": "vulnerable",
+  "cwe": "CWE-120",
+  "language": "c",
+  "source_path": "evaluation/dataset/vulnerable/memory/mem_02.c",
+  "target_function": "concat_headers",
+  "triage": {
+    "enabled": true,
+    "selected": true,
+    "risk_score": 71.3,
+    "bypass_reason": "STATIC_SIGNAL:UNBOUNDED_C_API"
+  },
+  "vulnerability_found": true,
+  "reported_cwe": "CWE-120",
+  "reported_type": "BUFFER_OVERFLOW",
+  "cwe_match": true,
+  "localization_correct": true,
+  "exploit_status": "UNAVAILABLE",
+  "patch_generated": true,
+  "patched_code": "#include <stdio.h>\n#include <string.h>\n\nvoid concat_headers(const char *user_val) {\n    char out[64] = \"Header: \";\n    // Buffer overflow: strcat appends without verifying remaining capacity\n    strncat(out, user_val, sizeof(out) - strlen(out) - 1);\n    printf(\"Result: %s\\n\", out);\n}\n\nint main(int argc, char **argv) {\n    if (argc > 1) {\n        concat_headers(argv[1]);\n    }\n    return 0;\n}\n",
+  "patch_applied": true,
+  "patch_apply_error": null,
+  "patch_syntax_valid": [
+    false,
+    "Syntax error near line 17, column 1"
+  ],
+  "attempts_used": 3,
+  "judge_verdict": "MAX_RETRIES_EXHAUSTED",
+  "pipeline_status": "FAILED",
+  "strict_repair_success": false,
+  "failure_category": "REGRESSION_FAILURE",
+  "original_security_test": {
+    "passed": true,
+    "vulnerability_demonstrated": true,
+    "evidence": "Process hung on buffer overflow",
+    "error": null
+  },
+  "original_regression_test": {
+    "passed": true,
+    "vulnerability_demonstrated": false,
+    "evidence": "stdout=Result: Header: ValidInput",
+    "error": null
+  },
+  "patched_security_test": {
+    "passed": false,
+    "vulnerability_demonstrated": false,
+    "evidence": "Compilation failed: C:\\Users\\singh\\AppData\\Local\\Temp\\tmpr7lx3knu\\mem_02.c:16:3: error: expected identifier or '(' before 'return'\n } return 0;\n   ^~~~~~\nC:\\Users\\singh\\AppData\\Local\\Temp\\tmpr7lx3knu\\mem_02.c:17:1: error: expected identifier or '(' before '}' token\n }\n ^\n",
+    "error": "Compilation failed: C:\\Users\\singh\\AppData\\Local\\Temp\\tmpr7lx3knu\\mem_02.c:16:3: error: expected identifier or '(' before 'return'\n } return 0;\n   ^~~~~~\nC:\\Users\\singh\\AppData\\Local\\Temp\\tmpr7lx3knu\\mem_02.c:17:1: error: expected identifier or '(' before '}' token\n }\n ^\n"
+  },
+  "patched_regression_test": {
+    "passed": false,
+    "vulnerability_demonstrated": false,
+    "evidence": "Compilation failed: C:\\Users\\singh\\AppData\\Local\\Temp\\tmpr7lx3knu\\mem_02.c:16:3: error: expected identifier or '(' before 'return'\n } return 0;\n   ^~~~~~\nC:\\Users\\singh\\AppData\\Local\\Temp\\tmpr7lx3knu\\mem_02.c:17:1: error: expected identifier or '(' before '}' token\n }\n ^\n",
+    "error": "Compilation failed: C:\\Users\\singh\\AppData\\Local\\Temp\\tmpr7lx3knu\\mem_02.c:16:3: error: expected identifier or '(' before 'return'\n } return 0;\n   ^~~~~~\nC:\\Users\\singh\\AppData\\Local\\Temp\\tmpr7lx3knu\\mem_02.c:17:1: error: expected identifier or '(' before '}' token\n }\n ^\n"
+  },
+  "elapsed_seconds": 75.494,
+  "usage": {
+    "calls": 6,
+    "input_tokens": 8164,
+    "output_tokens": 7884,
+    "total_tokens": 16048,
+    "cost_usd": 0.0
+  }
+}

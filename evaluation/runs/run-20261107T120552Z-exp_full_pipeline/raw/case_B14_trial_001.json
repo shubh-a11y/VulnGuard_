@@ -1,0 +1,66 @@
+{
+  "run_id": "run-20261107T120552Z-exp_full_pipeline",
+  "case_id": "B14",
+  "ground_truth": "vulnerable",
+  "cwe": "CWE-22",
+  "language": "python",
+  "source_path": "evaluation/dataset/vulnerable/path/path_02.py",
+  "target_function": "fetch_document",
+  "triage": {
+    "enabled": true,
+    "selected": true,
+    "risk_score": 42.5,
+    "bypass_reason": null
+  },
+  "vulnerability_found": true,
+  "reported_cwe": "CWE-22",
+  "reported_type": "PATH_TRAVERSAL",
+  "cwe_match": true,
+  "localization_correct": true,
+  "exploit_status": "AVAILABLE",
+  "patch_generated": true,
+  "patched_code": "import os\n\ndef fetch_document(doc_folder: str, relative_name: str) -> str:\n    base_dir = os.path.abspath(doc_folder)\n    full_path = os.path.abspath(os.path.join(base_dir, relative_name))\n    if os.path.commonpath([base_dir, full_path]) != base_dir:\n        raise ValueError(\"Path traversal detected\")\n    with open(full_path, \"r\", encoding=\"utf-8\") as f:\n        return f.read()\n",
+  "patch_applied": true,
+  "patch_apply_error": null,
+  "patch_syntax_valid": [
+    false,
+    "Syntax error near line 9, column 24"
+  ],
+  "attempts_used": 3,
+  "judge_verdict": "MAX_RETRIES_EXHAUSTED",
+  "pipeline_status": "FAILED",
+  "strict_repair_success": false,
+  "failure_category": "REGRESSION_FAILURE",
+  "original_security_test": {
+    "passed": true,
+    "vulnerability_demonstrated": true,
+    "evidence": "Read secret: CANARY_SECRET_DATA_TRAVERSAL_CONFIRMED",
+    "error": null
+  },
+  "original_regression_test": {
+    "passed": true,
+    "vulnerability_demonstrated": false,
+    "evidence": "Read VALID_FILE_CONTENT",
+    "error": null
+  },
+  "patched_security_test": {
+    "passed": false,
+    "vulnerability_demonstrated": false,
+    "evidence": "invalid syntax (path_02.py, line 9)",
+    "error": "invalid syntax (path_02.py, line 9)"
+  },
+  "patched_regression_test": {
+    "passed": false,
+    "vulnerability_demonstrated": false,
+    "evidence": "invalid syntax (path_02.py, line 9)",
+    "error": "invalid syntax (path_02.py, line 9)"
+  },
+  "elapsed_seconds": 180.588,
+  "usage": {
+    "calls": 7,
+    "input_tokens": 7223,
+    "output_tokens": 25278,
+    "total_tokens": 32501,
+    "cost_usd": 0.0
+  }
+}

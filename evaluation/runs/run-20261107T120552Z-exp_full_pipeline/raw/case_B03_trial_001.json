@@ -1,0 +1,66 @@
+{
+  "run_id": "run-20261107T120552Z-exp_full_pipeline",
+  "case_id": "B03",
+  "ground_truth": "vulnerable",
+  "cwe": "CWE-89",
+  "language": "python",
+  "source_path": "evaluation/dataset/vulnerable/sql/sqli_03.py",
+  "target_function": "filter_orders",
+  "triage": {
+    "enabled": true,
+    "selected": true,
+    "risk_score": 92.5,
+    "bypass_reason": "STATIC_SIGNAL:DYNAMIC_SQL"
+  },
+  "vulnerability_found": true,
+  "reported_cwe": "CWE-89",
+  "reported_type": "SQL_INJECTION",
+  "cwe_match": true,
+  "localization_correct": true,
+  "exploit_status": "AVAILABLE",
+  "patch_generated": true,
+  "patched_code": "import sqlite3\n\ndef filter_orders(status: str, db_path: str = \"orders.db\"):\n    conn = sqlite3.connect(db_path)\n    cursor = conn.cursor()\n    cursor.execute(\"SELECT order_id, customer, status, total FROM orders WHERE status = ?\", (status,))\n    rows = cursor.fetchall()\n    conn.close()\n    return rows\n",
+  "patch_applied": true,
+  "patch_apply_error": null,
+  "patch_syntax_valid": [
+    false,
+    "Syntax error near line 9, column 12"
+  ],
+  "attempts_used": 3,
+  "judge_verdict": "MAX_RETRIES_EXHAUSTED",
+  "pipeline_status": "FAILED",
+  "strict_repair_success": false,
+  "failure_category": "REGRESSION_FAILURE",
+  "original_security_test": {
+    "passed": true,
+    "vulnerability_demonstrated": true,
+    "evidence": "filter_orders returned 2 rows: [(1, 'alice', 'completed', 50.0), (2, 'bob', 'cancelled', 100.0)]",
+    "error": null
+  },
+  "original_regression_test": {
+    "passed": true,
+    "vulnerability_demonstrated": false,
+    "evidence": "Returned [(1, 'alice', 'completed', 50.0)]",
+    "error": null
+  },
+  "patched_security_test": {
+    "passed": false,
+    "vulnerability_demonstrated": false,
+    "evidence": "invalid syntax (sqli_03.py, line 9)",
+    "error": "invalid syntax (sqli_03.py, line 9)"
+  },
+  "patched_regression_test": {
+    "passed": false,
+    "vulnerability_demonstrated": false,
+    "evidence": "invalid syntax (sqli_03.py, line 9)",
+    "error": "invalid syntax (sqli_03.py, line 9)"
+  },
+  "elapsed_seconds": 66.817,
+  "usage": {
+    "calls": 5,
+    "input_tokens": 5506,
+    "output_tokens": 8576,
+    "total_tokens": 14082,
+    "cost_usd": 0.0
+  }
+}

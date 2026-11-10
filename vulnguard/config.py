@@ -70,6 +70,10 @@ class LLMConfig:
     # truncation retry escalation in vulnguard.agents.*_agent._call_llm.
     temperature: float = _env_float("VULNGUARD_LLM_TEMPERATURE", 0.0)
     max_tokens: int = _env_int("VULNGUARD_LLM_MAX_TOKENS", 4096)
+    # A proof-of-concept harness is a complete program embedded in a JSON string,
+    # so it needs more room than a diagnosis. Starting the harness call at this
+    # budget is what stops reasoning tokens from truncating the JSON.
+    harness_max_tokens: int = _env_int("VULNGUARD_LLM_HARNESS_MAX_TOKENS", 8192)
     # Hard cap for truncation escalation. The per-request budget doubles on
     # finish_reason=length up to this ceiling; once the ceiling is reached a
     # further identical request is pointless, so the call fails explicitly
@@ -147,7 +151,7 @@ class DataConfig:
     # Legacy C/C++ dataset (DiverseVul)
     dataset_name: str = "benjis/DiverseVul"  # HuggingFace dataset ID
     # Python vulnerability datasets
-    pycodevul_csv: str = "hf://datasets/S-AIR-L/PyCode-Vul/PyCode_Vul- train-set.csv"
+    pycodevul_csv: str = "hf://datasets/S-AIR-L/PyCode-Vul/PyCode_Vul-train-set.csv"
     cvefixes_name: str = "hitoshura25/cvefixes"
     train_split_ratio: float = 0.8  # 80% train / 20% test by project
 

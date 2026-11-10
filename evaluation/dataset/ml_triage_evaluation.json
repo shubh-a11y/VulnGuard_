@@ -1,0 +1,707 @@
+{
+  "timestamp": "2026-11-07T12:06:09Z",
+  "model_metadata": {
+    "model_path": "C:\\Users\\singh\\OneDrive\\Desktop\\AI Projects\\VulnGuard\\vulnguard\\models\\artifacts\\vulnguard_classifier.joblib",
+    "model_sha256": "4e9910f0a9d2b6d34e65d4f914edfaaaaa9f63bba5cc00fa46d6ea8001e4dac7",
+    "raw_model_threshold": 0.4937255382537842,
+    "deployed_triage_threshold": 30
+  },
+  "raw_xgboost": {
+    "metrics": {
+      "confusion_matrix": {
+        "tp": 9,
+        "fp": 5,
+        "tn": 10,
+        "fn": 6,
+        "total": 30
+      },
+      "accuracy": 63.33,
+      "precision": 64.29,
+      "recall": 60.0,
+      "f1_score": 62.07,
+      "specificity": 66.67,
+      "false_positive_rate": 33.33,
+      "vulnerability_retention": 60.0,
+      "selection_ratio": 46.67
+    },
+    "cases": [
+      {
+        "case_id": "B01",
+        "ground_truth": "vulnerable",
+        "language": "python",
+        "raw_probability": 0.8787,
+        "threshold": 0.4937255382537842,
+        "predicted_label": "vulnerable",
+        "correct": true
+      },
+      {
+        "case_id": "B02",
+        "ground_truth": "vulnerable",
+        "language": "python",
+        "raw_probability": 0.9248,
+        "threshold": 0.4937255382537842,
+        "predicted_label": "vulnerable",
+        "correct": true
+      },
+      {
+        "case_id": "B03",
+        "ground_truth": "vulnerable",
+        "language": "python",
+        "raw_probability": 0.9244,
+        "threshold": 0.4937255382537842,
+        "predicted_label": "vulnerable",
+        "correct": true
+      },
+      {
+        "case_id": "B04",
+        "ground_truth": "safe",
+        "language": "python",
+        "raw_probability": 0.8948,
+        "threshold": 0.4937255382537842,
+        "predicted_label": "vulnerable",
+        "correct": false
+      },
+      {
+        "case_id": "B05",
+        "ground_truth": "safe",
+        "language": "python",
+        "raw_probability": 0.8787,
+        "threshold": 0.4937255382537842,
+        "predicted_label": "vulnerable",
+        "correct": false
+      },
+      {
+        "case_id": "B06",
+        "ground_truth": "safe",
+        "language": "python",
+        "raw_probability": 0.9223,
+        "threshold": 0.4937255382537842,
+        "predicted_label": "vulnerable",
+        "correct": false
+      },
+      {
+        "case_id": "B07",
+        "ground_truth": "vulnerable",
+        "language": "python",
+        "raw_probability": 0.7611,
+        "threshold": 0.4937255382537842,
+        "predicted_label": "vulnerable",
+        "correct": true
+      },
+      {
+        "case_id": "B08",
+        "ground_truth": "vulnerable",
+        "language": "python",
+        "raw_probability": 0.7591,
+        "threshold": 0.4937255382537842,
+        "predicted_label": "vulnerable",
+        "correct": true
+      },
+      {
+        "case_id": "B09",
+        "ground_truth": "vulnerable",
+        "language": "python",
+        "raw_probability": 0.7328,
+        "threshold": 0.4937255382537842,
+        "predicted_label": "vulnerable",
+        "correct": true
+      },
+      {
+        "case_id": "B10",
+        "ground_truth": "safe",
+        "language": "python",
+        "raw_probability": 0.8604,
+        "threshold": 0.4937255382537842,
+        "predicted_label": "vulnerable",
+        "correct": false
+      },
+      {
+        "case_id": "B11",
+        "ground_truth": "safe",
+        "language": "python",
+        "raw_probability": 0.425,
+        "threshold": 0.4937255382537842,
+        "predicted_label": "safe",
+        "correct": true
+      },
+      {
+        "case_id": "B12",
+        "ground_truth": "safe",
+        "language": "python",
+        "raw_probability": 0.425,
+        "threshold": 0.4937255382537842,
+        "predicted_label": "safe",
+        "correct": true
+      },
+      {
+        "case_id": "B13",
+        "ground_truth": "vulnerable",
+        "language": "python",
+        "raw_probability": 0.425,
+        "threshold": 0.4937255382537842,
+        "predicted_label": "safe",
+        "correct": false
+      },
+      {
+        "case_id": "B14",
+        "ground_truth": "vulnerable",
+        "language": "python",
+        "raw_probability": 0.425,
+        "threshold": 0.4937255382537842,
+        "predicted_label": "safe",
+        "correct": false
+      },
+      {
+        "case_id": "B15",
+        "ground_truth": "vulnerable",
+        "language": "c",
+        "raw_probability": 0.3176,
+        "threshold": 0.4937255382537842,
+        "predicted_label": "safe",
+        "correct": false
+      },
+      {
+        "case_id": "B16",
+        "ground_truth": "safe",
+        "language": "python",
+        "raw_probability": 0.4217,
+        "threshold": 0.4937255382537842,
+        "predicted_label": "safe",
+        "correct": true
+      },
+      {
+        "case_id": "B17",
+        "ground_truth": "safe",
+        "language": "python",
+        "raw_probability": 0.4052,
+        "threshold": 0.4937255382537842,
+        "predicted_label": "safe",
+        "correct": true
+      },
+      {
+        "case_id": "B18",
+        "ground_truth": "safe",
+        "language": "c",
+        "raw_probability": 0.2491,
+        "threshold": 0.4937255382537842,
+        "predicted_label": "safe",
+        "correct": true
+      },
+      {
+        "case_id": "B19",
+        "ground_truth": "vulnerable",
+        "language": "c",
+        "raw_probability": 0.7126,
+        "threshold": 0.4937255382537842,
+        "predicted_label": "vulnerable",
+        "correct": true
+      },
+      {
+        "case_id": "B20",
+        "ground_truth": "vulnerable",
+        "language": "c",
+        "raw_probability": 0.7126,
+        "threshold": 0.4937255382537842,
+        "predicted_label": "vulnerable",
+        "correct": true
+      },
+      {
+        "case_id": "B21",
+        "ground_truth": "vulnerable",
+        "language": "c",
+        "raw_probability": 0.7126,
+        "threshold": 0.4937255382537842,
+        "predicted_label": "vulnerable",
+        "correct": true
+      },
+      {
+        "case_id": "B22",
+        "ground_truth": "safe",
+        "language": "c",
+        "raw_probability": 0.9164,
+        "threshold": 0.4937255382537842,
+        "predicted_label": "vulnerable",
+        "correct": false
+      },
+      {
+        "case_id": "B23",
+        "ground_truth": "safe",
+        "language": "c",
+        "raw_probability": 0.1842,
+        "threshold": 0.4937255382537842,
+        "predicted_label": "safe",
+        "correct": true
+      },
+      {
+        "case_id": "B24",
+        "ground_truth": "safe",
+        "language": "c",
+        "raw_probability": 0.2195,
+        "threshold": 0.4937255382537842,
+        "predicted_label": "safe",
+        "correct": true
+      },
+      {
+        "case_id": "B25",
+        "ground_truth": "vulnerable",
+        "language": "c",
+        "raw_probability": 0.2409,
+        "threshold": 0.4937255382537842,
+        "predicted_label": "safe",
+        "correct": false
+      },
+      {
+        "case_id": "B26",
+        "ground_truth": "vulnerable",
+        "language": "c",
+        "raw_probability": 0.2409,
+        "threshold": 0.4937255382537842,
+        "predicted_label": "safe",
+        "correct": false
+      },
+      {
+        "case_id": "B27",
+        "ground_truth": "vulnerable",
+        "language": "c",
+        "raw_probability": 0.2195,
+        "threshold": 0.4937255382537842,
+        "predicted_label": "safe",
+        "correct": false
+      },
+      {
+        "case_id": "B28",
+        "ground_truth": "safe",
+        "language": "c",
+        "raw_probability": 0.2409,
+        "threshold": 0.4937255382537842,
+        "predicted_label": "safe",
+        "correct": true
+      },
+      {
+        "case_id": "B29",
+        "ground_truth": "safe",
+        "language": "c",
+        "raw_probability": 0.2409,
+        "threshold": 0.4937255382537842,
+        "predicted_label": "safe",
+        "correct": true
+      },
+      {
+        "case_id": "B30",
+        "ground_truth": "safe",
+        "language": "c",
+        "raw_probability": 0.2195,
+        "threshold": 0.4937255382537842,
+        "predicted_label": "safe",
+        "correct": true
+      }
+    ]
+  },
+  "deployed_triage": {
+    "metrics": {
+      "confusion_matrix": {
+        "tp": 13,
+        "fp": 9,
+        "tn": 6,
+        "fn": 2,
+        "total": 30
+      },
+      "accuracy": 63.33,
+      "precision": 59.09,
+      "recall": 86.67,
+      "f1_score": 70.27,
+      "specificity": 40.0,
+      "false_positive_rate": 60.0,
+      "vulnerability_retention": 86.67,
+      "selection_ratio": 73.33
+    },
+    "cases": [
+      {
+        "case_id": "B01",
+        "ground_truth": "vulnerable",
+        "language": "python",
+        "raw_probability": 0.8787,
+        "final_risk_score": 87.9,
+        "deployed_threshold": 30,
+        "bypass_reason": "STATIC_SIGNAL:DYNAMIC_SQL",
+        "selected_for_analysis": true,
+        "correct": true,
+        "latency_ms": 5.596
+      },
+      {
+        "case_id": "B02",
+        "ground_truth": "vulnerable",
+        "language": "python",
+        "raw_probability": 0.9248,
+        "final_risk_score": 92.5,
+        "deployed_threshold": 30,
+        "bypass_reason": "STATIC_SIGNAL:DYNAMIC_SQL",
+        "selected_for_analysis": true,
+        "correct": true,
+        "latency_ms": 4.971
+      },
+      {
+        "case_id": "B03",
+        "ground_truth": "vulnerable",
+        "language": "python",
+        "raw_probability": 0.9244,
+        "final_risk_score": 92.4,
+        "deployed_threshold": 30,
+        "bypass_reason": "STATIC_SIGNAL:DYNAMIC_SQL",
+        "selected_for_analysis": true,
+        "correct": true,
+        "latency_ms": 3.907
+      },
+      {
+        "case_id": "B04",
+        "ground_truth": "safe",
+        "language": "python",
+        "raw_probability": 0.8948,
+        "final_risk_score": 89.5,
+        "deployed_threshold": 30,
+        "bypass_reason": "NONE",
+        "selected_for_analysis": true,
+        "correct": false,
+        "latency_ms": 7.633
+      },
+      {
+        "case_id": "B05",
+        "ground_truth": "safe",
+        "language": "python",
+        "raw_probability": 0.8787,
+        "final_risk_score": 87.9,
+        "deployed_threshold": 30,
+        "bypass_reason": "NONE",
+        "selected_for_analysis": true,
+        "correct": false,
+        "latency_ms": 4.993
+      },
+      {
+        "case_id": "B06",
+        "ground_truth": "safe",
+        "language": "python",
+        "raw_probability": 0.9223,
+        "final_risk_score": 92.2,
+        "deployed_threshold": 30,
+        "bypass_reason": "NONE",
+        "selected_for_analysis": true,
+        "correct": false,
+        "latency_ms": 6.633
+      },
+      {
+        "case_id": "B07",
+        "ground_truth": "vulnerable",
+        "language": "python",
+        "raw_probability": 0.7611,
+        "final_risk_score": 76.1,
+        "deployed_threshold": 30,
+        "bypass_reason": "STATIC_SIGNAL:SHELL_EXECUTION",
+        "selected_for_analysis": true,
+        "correct": true,
+        "latency_ms": 4.068
+      },
+      {
+        "case_id": "B08",
+        "ground_truth": "vulnerable",
+        "language": "python",
+        "raw_probability": 0.7591,
+        "final_risk_score": 75.9,
+        "deployed_threshold": 30,
+        "bypass_reason": "STATIC_SIGNAL:SHELL_EXECUTION",
+        "selected_for_analysis": true,
+        "correct": true,
+        "latency_ms": 4.332
+      },
+      {
+        "case_id": "B09",
+        "ground_truth": "vulnerable",
+        "language": "python",
+        "raw_probability": 0.7328,
+        "final_risk_score": 73.3,
+        "deployed_threshold": 30,
+        "bypass_reason": "STATIC_SIGNAL:SHELL_EXECUTION",
+        "selected_for_analysis": true,
+        "correct": true,
+        "latency_ms": 7.169
+      },
+      {
+        "case_id": "B10",
+        "ground_truth": "safe",
+        "language": "python",
+        "raw_probability": 0.8604,
+        "final_risk_score": 86.0,
+        "deployed_threshold": 30,
+        "bypass_reason": "NONE",
+        "selected_for_analysis": true,
+        "correct": false,
+        "latency_ms": 8.319
+      },
+      {
+        "case_id": "B11",
+        "ground_truth": "safe",
+        "language": "python",
+        "raw_probability": 0.425,
+        "final_risk_score": 42.5,
+        "deployed_threshold": 30,
+        "bypass_reason": "NONE",
+        "selected_for_analysis": true,
+        "correct": false,
+        "latency_ms": 3.61
+      },
+      {
+        "case_id": "B12",
+        "ground_truth": "safe",
+        "language": "python",
+        "raw_probability": 0.425,
+        "final_risk_score": 42.5,
+        "deployed_threshold": 30,
+        "bypass_reason": "NONE",
+        "selected_for_analysis": true,
+        "correct": false,
+        "latency_ms": 3.766
+      },
+      {
+        "case_id": "B13",
+        "ground_truth": "vulnerable",
+        "language": "python",
+        "raw_probability": 0.425,
+        "final_risk_score": 42.5,
+        "deployed_threshold": 30,
+        "bypass_reason": "NONE",
+        "selected_for_analysis": true,
+        "correct": true,
+        "latency_ms": 4.009
+      },
+      {
+        "case_id": "B14",
+        "ground_truth": "vulnerable",
+        "language": "python",
+        "raw_probability": 0.425,
+        "final_risk_score": 42.5,
+        "deployed_threshold": 30,
+        "bypass_reason": "NONE",
+        "selected_for_analysis": true,
+        "correct": true,
+        "latency_ms": 3.946
+      },
+      {
+        "case_id": "B15",
+        "ground_truth": "vulnerable",
+        "language": "c",
+        "raw_probability": 0.3176,
+        "final_risk_score": 31.8,
+        "deployed_threshold": 30,
+        "bypass_reason": "NONE",
+        "selected_for_analysis": true,
+        "correct": true,
+        "latency_ms": 7.095
+      },
+      {
+        "case_id": "B16",
+        "ground_truth": "safe",
+        "language": "python",
+        "raw_probability": 0.4217,
+        "final_risk_score": 42.2,
+        "deployed_threshold": 30,
+        "bypass_reason": "NONE",
+        "selected_for_analysis": true,
+        "correct": false,
+        "latency_ms": 4.306
+      },
+      {
+        "case_id": "B17",
+        "ground_truth": "safe",
+        "language": "python",
+        "raw_probability": 0.4052,
+        "final_risk_score": 40.5,
+        "deployed_threshold": 30,
+        "bypass_reason": "NONE",
+        "selected_for_analysis": true,
+        "correct": false,
+        "latency_ms": 5.343
+      },
+      {
+        "case_id": "B18",
+        "ground_truth": "safe",
+        "language": "c",
+        "raw_probability": 0.2491,
+        "final_risk_score": 24.9,
+        "deployed_threshold": 30,
+        "bypass_reason": "NONE",
+        "selected_for_analysis": false,
+        "correct": true,
+        "latency_ms": 8.033
+      },
+      {
+        "case_id": "B19",
+        "ground_truth": "vulnerable",
+        "language": "c",
+        "raw_probability": 0.7126,
+        "final_risk_score": 71.3,
+        "deployed_threshold": 30,
+        "bypass_reason": "STATIC_SIGNAL:UNBOUNDED_C_API",
+        "selected_for_analysis": true,
+        "correct": true,
+        "latency_ms": 4.258
+      },
+      {
+        "case_id": "B20",
+        "ground_truth": "vulnerable",
+        "language": "c",
+        "raw_probability": 0.7126,
+        "final_risk_score": 71.3,
+        "deployed_threshold": 30,
+        "bypass_reason": "STATIC_SIGNAL:UNBOUNDED_C_API",
+        "selected_for_analysis": true,
+        "correct": true,
+        "latency_ms": 4.312
+      },
+      {
+        "case_id": "B21",
+        "ground_truth": "vulnerable",
+        "language": "c",
+        "raw_probability": 0.7126,
+        "final_risk_score": 71.3,
+        "deployed_threshold": 30,
+        "bypass_reason": "STATIC_SIGNAL:UNBOUNDED_C_API",
+        "selected_for_analysis": true,
+        "correct": true,
+        "latency_ms": 5.988
+      },
+      {
+        "case_id": "B22",
+        "ground_truth": "safe",
+        "language": "c",
+        "raw_probability": 0.9164,
+        "final_risk_score": 91.6,
+        "deployed_threshold": 30,
+        "bypass_reason": "NONE",
+        "selected_for_analysis": true,
+        "correct": false,
+        "latency_ms": 4.896
+      },
+      {
+        "case_id": "B23",
+        "ground_truth": "safe",
+        "language": "c",
+        "raw_probability": 0.1842,
+        "final_risk_score": 18.4,
+        "deployed_threshold": 30,
+        "bypass_reason": "NONE",
+        "selected_for_analysis": false,
+        "correct": true,
+        "latency_ms": 5.164
+      },
+      {
+        "case_id": "B24",
+        "ground_truth": "safe",
+        "language": "c",
+        "raw_probability": 0.2195,
+        "final_risk_score": 21.9,
+        "deployed_threshold": 30,
+        "bypass_reason": "NONE",
+        "selected_for_analysis": false,
+        "correct": true,
+        "latency_ms": 4.766
+      },
+      {
+        "case_id": "B25",
+        "ground_truth": "vulnerable",
+        "language": "c",
+        "raw_probability": 0.2409,
+        "final_risk_score": 30.0,
+        "deployed_threshold": 30,
+        "bypass_reason": "STATIC_SIGNAL:NON_LITERAL_FORMAT_STRING",
+        "selected_for_analysis": true,
+        "correct": true,
+        "latency_ms": 4.336
+      },
+      {
+        "case_id": "B26",
+        "ground_truth": "vulnerable",
+        "language": "c",
+        "raw_probability": 0.2409,
+        "final_risk_score": 24.1,
+        "deployed_threshold": 30,
+        "bypass_reason": "NONE",
+        "selected_for_analysis": false,
+        "correct": false,
+        "latency_ms": 4.474
+      },
+      {
+        "case_id": "B27",
+        "ground_truth": "vulnerable",
+        "language": "c",
+        "raw_probability": 0.2195,
+        "final_risk_score": 21.9,
+        "deployed_threshold": 30,
+        "bypass_reason": "NONE",
+        "selected_for_analysis": false,
+        "correct": false,
+        "latency_ms": 4.802
+      },
+      {
+        "case_id": "B28",
+        "ground_truth": "safe",
+        "language": "c",
+        "raw_probability": 0.2409,
+        "final_risk_score": 24.1,
+        "deployed_threshold": 30,
+        "bypass_reason": "NONE",
+        "selected_for_analysis": false,
+        "correct": true,
+        "latency_ms": 4.367
+      },
+      {
+        "case_id": "B29",
+        "ground_truth": "safe",
+        "language": "c",
+        "raw_probability": 0.2409,
+        "final_risk_score": 24.1,
+        "deployed_threshold": 30,
+        "bypass_reason": "NONE",
+        "selected_for_analysis": false,
+        "correct": true,
+        "latency_ms": 4.388
+      },
+      {
+        "case_id": "B30",
+        "ground_truth": "safe",
+        "language": "c",
+        "raw_probability": 0.2195,
+        "final_risk_score": 21.9,
+        "deployed_threshold": 30,
+        "bypass_reason": "NONE",
+        "selected_for_analysis": false,
+        "correct": true,
+        "latency_ms": 5.467
+      }
+    ]
+  },
+  "latency_profile": {
+    "python": {
+      "count": 16,
+      "mean_ms": 5.163,
+      "median_ms": 4.652,
+      "p95_ms": 8.319,
+      "min_ms": 3.61,
+      "max_ms": 8.319
+    },
+    "c": {
+      "count": 14,
+      "mean_ms": 5.168,
+      "median_ms": 4.784,
+      "p95_ms": 8.033,
+      "min_ms": 4.258,
+      "max_ms": 8.033
+    },
+    "all": {
+      "count": 30,
+      "mean_ms": 5.165,
+      "median_ms": 4.784,
+      "p95_ms": 8.162,
+      "min_ms": 3.61,
+      "max_ms": 8.319
+    }
+  }
+}

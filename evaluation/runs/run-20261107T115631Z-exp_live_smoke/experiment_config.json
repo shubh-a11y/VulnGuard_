@@ -1,0 +1,17 @@
+{
+  "experiment_id": "exp_live_smoke",
+  "description": "Live end-to-end validation run on initial benchmark cases",
+  "triage_enabled": true,
+  "triage_threshold": 30,
+  "multi_agent": true,
+  "single_pass_baseline": false,
+  "max_attempts": 2,
+  "patch_strategy": "ast_span",
+  "llm_provider": "gemini",
+  "model_name": "gemini-3.1-pro-preview",
+  "temperature": 0.0,
+  "cases": [
+    "B01",
+    "B07"
+  ]
+}

@@ -82,6 +82,7 @@ class ContextBundle:
 
     imports: list[str] = field(default_factory=list)
     type_definitions: list[str] = field(default_factory=list)
+    class_context: list[str] = field(default_factory=list)
     caller_signatures: list[str] = field(default_factory=list)
     callee_signatures: list[str] = field(default_factory=list)
     global_variables: list[str] = field(default_factory=list)
@@ -96,6 +97,8 @@ class ContextBundle:
 
         if self.imports:
             sections.append("=== IMPORTS ===\n" + "\n".join(self.imports))
+        if self.class_context:
+            sections.append("=== ENCLOSING CLASS ===\n" + "\n".join(self.class_context))
         if self.type_definitions:
             sections.append("=== TYPE DEFINITIONS ===\n" + "\n".join(self.type_definitions))
         if self.caller_signatures:
@@ -120,6 +123,7 @@ class ContextBundle:
         return {
             "imports": self.imports,
             "type_definitions": self.type_definitions,
+            "class_context": self.class_context,
             "caller_signatures": self.caller_signatures,
             "callee_signatures": self.callee_signatures,
             "global_variables": self.global_variables,
@@ -138,6 +142,8 @@ def gather_context(
     repo_root: Optional[Path] = None,
     language: str = "c",
     token_budget: Optional[int] = None,
+    known_imports: Optional[list[str]] = None,
+    known_callees: Optional[list[str]] = None,
 ) -> ContextBundle:
     """Extract dependency context for a target function.
 
@@ -147,6 +153,11 @@ def gather_context(
         repo_root: Repository root (for traversing imports).
         language: Programming language.
         token_budget: Max tokens for the context bundle. Defaults to config.
+        known_imports: Imports already extracted by the tree-sitter parser; they
+            are more reliable than the regex fallback and are merged in first.
+        known_callees: Callee names already extracted by the parser. They keep
+            method calls such as ``self.db.update_user_status`` in the context
+            even when the call target lives in another module.
 
     Returns:
         ContextBundle with all gathered dependencies and warnings.
@@ -163,7 +174,14 @@ def gather_context(
         except Exception as exc:
             ctx.warnings.append(f"Could not read file: {exc}")
 
-    ctx.imports = _extract_imports(file_content or func_code, language)
+    ctx.imports = list(
+        dict.fromkeys(
+            [
+                *(known_imports or []),
+                *_extract_imports(file_content or func_code, language),
+            ]
+        )
+    )
 
     # ── 2. Dynamic import detection (EC-6.2) ──────────────
     if _DYNAMIC_IMPORT.search(func_code):
@@ -186,17 +204,25 @@ def gather_context(
     ctx.macro_definitions = _extract_macros(file_content or func_code)
 
     # ── 6. Extract function signatures (callers/callees) ──
+    # Only signatures of functions the target actually calls are useful; the
+    # old `name in func_code` test matched unrelated substrings and produced
+    # empty or misleading callee lists.
+    called = _called_identifiers(func_code, known_callees)
     if file_content:
-        all_func_names = _extract_function_names(file_content)
-        # Callees: functions referenced in func_code
-        ctx.callee_signatures = [
-            sig for name, sig in all_func_names if name in func_code and sig not in func_code[:50]
-        ]
+        ctx.callee_signatures = _callee_signatures(file_content, called)
+        ctx.class_context = _extract_enclosing_class(file_content, func_code)
 
     # ── 7. Cross-file import resolution (limited depth) ───
     if repo_root and file_path:
         _resolve_imports(
-            ctx, repo_root, file_path, language, visited, depth=0, max_depth=3
+            ctx,
+            repo_root,
+            file_path,
+            language,
+            visited,
+            depth=0,
+            max_depth=3,
+            wanted=called,
         )
 
     # ── 8. Token budget enforcement (EC-6.4) ──────────────
@@ -266,7 +292,58 @@ def _extract_function_names(code: str) -> list[tuple[str, str]]:
     for m in _FUNC_SIG.finditer(code):
         name = m.group(1) or m.group(2)
         if name:
-            results.append((name, m.group(0).strip()))
+            results.append((name, m.group(0).strip().rstrip("{").strip()))
+    return results
+
+
+def _called_identifiers(func_code: str, known_callees: Optional[list[str]]) -> set[str]:
+    """Identifiers the target calls, from its source and the parser payload."""
+    called = set(re.findall(r"\b([A-Za-z_]\w*)\s*\(", func_code))
+    for value in known_callees or []:
+        # The parser may report ``self.db.update_user_status`` or ``db.query``;
+        # the signature list is keyed by the bare function name.
+        parts = re.findall(r"[A-Za-z_]\w*", str(value))
+        if parts:
+            called.add(parts[-1])
+    return called
+
+
+def _callee_signatures(code: str, called: set[str]) -> list[str]:
+    """Signatures of locally defined functions the target calls, once each."""
+    signatures = [
+        sig for name, sig in _extract_function_names(code) if name in called
+    ]
+    return list(dict.fromkeys(signatures))
+
+
+def _extract_enclosing_class(code: str, func_code: str) -> list[str]:
+    """Return the class header (and __init__ signature) that owns the target.
+
+    A harness for a method must instantiate the class first, so the class name
+    and constructor signature are part of the context the Red Agent needs.
+    """
+    match = re.search(r"^\s*(?:async\s+)?def\s+(\w+)\s*\(", func_code, re.MULTILINE)
+    if not match:
+        return []
+    function_name = match.group(1)
+
+    results: list[str] = []
+    for class_match in re.finditer(
+        r"^class\s+(\w+)(?:\s*\(([^)]*)\))?\s*:", code, re.MULTILINE
+    ):
+        block_start = class_match.end()
+        following = re.search(r"(?m)^\S", code[block_start:])
+        block = code[block_start : block_start + following.start()] if following else code[block_start:]
+        if not re.search(
+            r"^\s+(?:async\s+)?def\s+" + re.escape(function_name) + r"\s*\(",
+            block,
+            re.MULTILINE,
+        ):
+            continue
+        header = code[class_match.start() : block_start].strip()
+        init = re.search(r"^\s+(?:async\s+)?def\s+__init__\s*\([^)]*\)", block, re.MULTILINE)
+        entry = header + ("\n    " + init.group(0).strip() if init else "")
+        results.append(entry)
     return results
 
 
@@ -278,6 +355,7 @@ def _resolve_imports(
     visited: set[str],
     depth: int,
     max_depth: int,
+    wanted: Optional[set[str]] = None,
 ) -> None:
     """Recursively resolve imported files up to max_depth (EC-6.1)."""
     if depth >= max_depth:
@@ -297,6 +375,12 @@ def _resolve_imports(
                 # Extract type definitions from imported file
                 imported_types = _extract_type_defs(content)
                 ctx.type_definitions.extend(imported_types[:5])  # Cap per file
+                # Signatures of callees defined in the imported local module, so
+                # the harness can call them with the right arguments.
+                if wanted:
+                    for signature in _callee_signatures(content, wanted):
+                        if signature not in ctx.callee_signatures:
+                            ctx.callee_signatures.append(signature)
             except Exception:
                 pass
 
@@ -346,6 +430,7 @@ def _enforce_token_budget(ctx: ContextBundle, budget: int) -> None:
         "macro_definitions",
         "callee_signatures",
         "type_definitions",
+        "class_context",
     ]
 
     for field_name in priority_fields:

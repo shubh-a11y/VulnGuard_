@@ -1,0 +1,15 @@
+{
+  "experiment_id": "exp_full_pipeline",
+  "description": "Full VulnGuard pipeline using deployed ML triage layer and multi-agent repair with bounded retries",
+  "triage_enabled": true,
+  "triage_threshold": 30,
+  "multi_agent": true,
+  "single_pass_baseline": false,
+  "max_attempts": 3,
+  "patch_strategy": "ast_span",
+  "llm_provider": "gemini",
+  "model_name": "gemini-3.1-pro-preview",
+  "temperature": 0.0,
+  "cases": ["B01", "B02", "B03", "B07", "B08", "B09", "B13", "B14", "B15", "B19", "B20", "B21", "B25", "B26", "B27"]
+}
+

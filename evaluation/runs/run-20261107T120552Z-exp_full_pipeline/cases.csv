@@ -1,0 +1,16 @@
+case_id,ground_truth,cwe,language,source_path,target_function,triage_risk_score,triage_selected,vulnerability_found,reported_cwe,cwe_match,localization_correct,exploit_status,patch_generated,patch_applied,patch_syntax_valid,patched_sec_blocked,patched_reg_passed,attempts_used,strict_repair_success,failure_category,elapsed_seconds,llm_calls,prompt_tokens,completion_tokens,total_tokens,cost_usd
+B01,vulnerable,CWE-89,python,evaluation/dataset/vulnerable/sql/sqli_01.py,get_user,87.9,1,1,CWE-89,1,1,AVAILABLE,1,1,1,1,0,3,0,REGRESSION_FAILURE,92.887,5,5479,6205,11684,0.0
+B02,vulnerable,CWE-89,python,evaluation/dataset/vulnerable/sql/sqli_02.py,search_products,92.5,1,1,CWE-89,1,1,AVAILABLE,1,1,1,1,0,3,0,REGRESSION_FAILURE,70.66,5,5552,8763,14315,0.0
+B03,vulnerable,CWE-89,python,evaluation/dataset/vulnerable/sql/sqli_03.py,filter_orders,92.5,1,1,CWE-89,1,1,AVAILABLE,1,1,1,1,0,3,0,REGRESSION_FAILURE,66.817,5,5506,8576,14082,0.0
+B07,vulnerable,CWE-78,python,evaluation/dataset/vulnerable/command/cmdi_01.py,ping_host,76.1,1,1,CWE-78,1,1,UNAVAILABLE,1,1,1,1,0,3,0,REGRESSION_FAILURE,170.5,7,8488,20323,28811,0.0
+B08,vulnerable,CWE-78,python,evaluation/dataset/vulnerable/command/cmdi_02.py,count_lines,75.9,1,1,CWE-78,1,1,UNAVAILABLE,1,1,1,1,0,3,0,REGRESSION_FAILURE,192.209,7,8785,23169,31954,0.0
+B09,vulnerable,CWE-78,python,evaluation/dataset/vulnerable/command/cmdi_03.py,run_backup,73.3,1,1,CWE-78,1,1,UNAVAILABLE,1,1,1,1,0,3,0,REGRESSION_FAILURE,77.637,6,7618,7913,15531,0.0
+B13,vulnerable,CWE-22,python,evaluation/dataset/vulnerable/path/path_01.py,read_user_file,42.5,1,1,CWE-22,1,1,AVAILABLE,1,1,1,1,0,1,0,REGRESSION_FAILURE,59.086,3,3493,5327,8820,0.0
+B14,vulnerable,CWE-22,python,evaluation/dataset/vulnerable/path/path_02.py,fetch_document,42.5,1,1,CWE-22,1,1,AVAILABLE,1,1,1,1,0,3,0,REGRESSION_FAILURE,180.588,7,7223,25278,32501,0.0
+B15,vulnerable,CWE-22,c,evaluation/dataset/vulnerable/path/path_03.c,load_profile,29.5,0,0,,0,0,,0,0,0,0,0,0,0,TRIAGE_FILTERED,0.0,0,0,0,0,0.0
+B19,vulnerable,CWE-120,c,evaluation/dataset/vulnerable/memory/mem_01.c,process_data,71.3,1,1,CWE-121,0,1,AVAILABLE,1,1,1,1,0,3,0,INCORRECT_CWE_CLASSIFICATION,86.096,5,5610,10060,15670,0.0
+B20,vulnerable,CWE-120,c,evaluation/dataset/vulnerable/memory/mem_02.c,concat_headers,71.3,1,1,CWE-120,1,1,UNAVAILABLE,1,1,1,1,0,3,0,REGRESSION_FAILURE,75.494,6,8164,7884,16048,0.0
+B21,vulnerable,CWE-120,c,evaluation/dataset/vulnerable/memory/mem_03.c,format_record,71.3,1,1,CWE-120,1,1,AVAILABLE,1,1,1,1,0,3,0,REGRESSION_FAILURE,65.938,5,5829,6776,12605,0.0
+B25,vulnerable,CWE-134,c,evaluation/dataset/vulnerable/format/fmt_01.c,log_message,30.0,1,1,CWE-134,1,1,UNAVAILABLE,1,1,1,1,0,3,0,REGRESSION_FAILURE,110.391,6,7765,12309,20074,0.0
+B26,vulnerable,CWE-134,c,evaluation/dataset/vulnerable/format/fmt_02.c,report_error,24.1,0,0,,0,0,,0,0,0,0,0,0,0,TRIAGE_FILTERED,0.0,0,0,0,0,0.0
+B27,vulnerable,CWE-134,c,evaluation/dataset/vulnerable/format/fmt_03.c,format_status,21.9,0,0,,0,0,,0,0,0,0,0,0,0,TRIAGE_FILTERED,0.0,0,0,0,0,0.0

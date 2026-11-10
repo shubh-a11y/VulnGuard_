@@ -418,15 +418,22 @@ def create_app(
                 repo_root=str(repo_root or ""),
             )
             persist()
+            function_id = func.get("id", "unknown")
             await _safe_send(websocket, 
                 {
                     "type": "status",
                     "scan_id": scan_id,
+                    "function_id": function_id,
                     "message": f"Starting scan for {func.get('name', 'function')}...",
                 }
             )
 
             stage = "triage"
+            # The dashboard shows the ML evidence, not just the score: the
+            # features that produced it and any high-confidence static signal
+            # that bypassed the probabilistic model.
+            triage_features: dict[str, float] = {}
+            static_signal: str | None = None
             try:
                 from vulnguard.models.risk_scorer import RiskScorer
 
@@ -435,6 +442,16 @@ def create_app(
                 score = triage_result.risk_score
                 threshold = scorer.optimal_threshold
                 is_high_risk = score >= threshold or triage_result.bypass_reason is not None
+                for feature_name, feature_value in (triage_result.features or {}).items():
+                    try:
+                        numeric = float(feature_value)
+                    except (TypeError, ValueError):
+                        continue
+                    if numeric:
+                        triage_features[str(feature_name)] = round(numeric, 3)
+                bypass_reason = triage_result.bypass_reason or ""
+                if bypass_reason.startswith("STATIC_SIGNAL:"):
+                    static_signal = bypass_reason.split(":", 1)[1]
             except Exception as exc:
                 logger.warning("ML triage unavailable; routing to agents: %s", exc)
                 score = 100.0
@@ -447,9 +464,12 @@ def create_app(
                 {
                     "type": "triage_result",
                     "scan_id": scan_id,
+                    "function_id": function_id,
                     "score": round(score, 1),
                     "threshold": threshold,
                     "is_high_risk": is_high_risk,
+                    "features": triage_features,
+                    "static_signal": static_signal,
                 }
             )
 
@@ -457,7 +477,15 @@ def create_app(
                 aggregate.update(pipeline_status="COMPLETE", vulnerability_found=False)
                 persist()
                 await _safe_send(websocket, 
-                    {"type": "complete", "scan_id": scan_id, "message": "Low risk; agent analysis skipped."}
+                    {
+                        "type": "complete",
+                        "scan_id": scan_id,
+                        "function_id": function_id,
+                        "pipeline_status": "COMPLETE",
+                        "judge_verdict": None,
+                        "security_validated": False,
+                        "message": "Low risk; agent analysis skipped.",
+                    }
                 )
                 return
 
@@ -471,11 +499,17 @@ def create_app(
                 file_path=file_path,
                 repo_root=repo_root or file_path.parent,
                 language=func.get("language", "python"),
+                # The upload payload already carries tree-sitter imports and
+                # callees; without them a nested call target disappears and the
+                # context bundle looks emptier than the source really is.
+                known_imports=func.get("imports") or None,
+                known_callees=func.get("callees") or None,
             )
             await _safe_send(websocket, 
                 {
                     "type": "context_result",
                     "scan_id": scan_id,
+                    "function_id": function_id,
                     "imports": len(context.imports),
                     "callees": len(context.callee_signatures),
                     "warnings": context.warnings,
@@ -507,6 +541,7 @@ def create_app(
                         {
                             "type": "agent_update",
                             "scan_id": scan_id,
+                            "function_id": function_id,
                             "agent": node_name,
                             "state": node_state,
                         }
@@ -538,8 +573,12 @@ def create_app(
                 {
                     "type": "complete",
                     "scan_id": scan_id,
+                    "function_id": function_id,
                     "pipeline_status": aggregate.get("pipeline_status"),
                     "judge_verdict": aggregate.get("judge_verdict"),
+                    "exploit_status": aggregate.get("exploit_status"),
+                    "exploit_confirmed": bool(aggregate.get("exploit_confirmed")),
+                    "security_validated": bool(aggregate.get("security_validated")),
                 },
             )
         except WebSocketDisconnect:

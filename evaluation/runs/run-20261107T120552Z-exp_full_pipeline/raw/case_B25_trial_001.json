@@ -1,0 +1,66 @@
+{
+  "run_id": "run-20261107T120552Z-exp_full_pipeline",
+  "case_id": "B25",
+  "ground_truth": "vulnerable",
+  "cwe": "CWE-134",
+  "language": "c",
+  "source_path": "evaluation/dataset/vulnerable/format/fmt_01.c",
+  "target_function": "log_message",
+  "triage": {
+    "enabled": true,
+    "selected": true,
+    "risk_score": 30.0,
+    "bypass_reason": "STATIC_SIGNAL:NON_LITERAL_FORMAT_STRING"
+  },
+  "vulnerability_found": true,
+  "reported_cwe": "CWE-134",
+  "reported_type": "FORMAT_STRING",
+  "cwe_match": true,
+  "localization_correct": true,
+  "exploit_status": "UNAVAILABLE",
+  "patch_generated": true,
+  "patched_code": "#include <stdio.h>\n\nvoid log_message(char *msg) {\n    // Format string vulnerability fixed: user input passed as an argument to %s\n    printf(\"%s\", msg);\n    printf(\"\\n\");\n}\n\nint main(int argc, char **argv) {\n    if (argc > 1) {\n        log_message(argv[1]);\n    }\n    return 0;\n}\n",
+  "patch_applied": true,
+  "patch_apply_error": null,
+  "patch_syntax_valid": [
+    false,
+    "Syntax error near line 14, column 8"
+  ],
+  "attempts_used": 3,
+  "judge_verdict": "MAX_RETRIES_EXHAUSTED",
+  "pipeline_status": "FAILED",
+  "strict_repair_success": false,
+  "failure_category": "REGRESSION_FAILURE",
+  "original_security_test": {
+    "passed": true,
+    "vulnerability_demonstrated": true,
+    "evidence": "output=34399702.fffffffe.60ff08.76b38c1d, literal_found=False, hex_leak=True",
+    "error": null
+  },
+  "original_regression_test": {
+    "passed": true,
+    "vulnerability_demonstrated": false,
+    "evidence": "output=HelloNormalLog",
+    "error": null
+  },
+  "patched_security_test": {
+    "passed": false,
+    "vulnerability_demonstrated": false,
+    "evidence": "Compilation failed: C:\\Users\\singh\\AppData\\Local\\Temp\\tmpk8v05wku\\fmt_01.c:14:8: error: expected '=', ',', ';', 'asm' or '__attribute__' before numeric constant\n }eturn 0;\n        ^\nC:\\Users\\singh\\AppData\\Local\\Temp\\tmpk8v05wku\\fmt_01.c:15:1: error: expected identifier or '(' before '}' token\n }\n ^\n",
+    "error": "Compilation failed: C:\\Users\\singh\\AppData\\Local\\Temp\\tmpk8v05wku\\fmt_01.c:14:8: error: expected '=', ',', ';', 'asm' or '__attribute__' before numeric constant\n }eturn 0;\n        ^\nC:\\Users\\singh\\AppData\\Local\\Temp\\tmpk8v05wku\\fmt_01.c:15:1: error: expected identifier or '(' before '}' token\n }\n ^\n"
+  },
+  "patched_regression_test": {
+    "passed": false,
+    "vulnerability_demonstrated": false,
+    "evidence": "Compilation failed: C:\\Users\\singh\\AppData\\Local\\Temp\\tmpk8v05wku\\fmt_01.c:14:8: error: expected '=', ',', ';', 'asm' or '__attribute__' before numeric constant\n }eturn 0;\n        ^\nC:\\Users\\singh\\AppData\\Local\\Temp\\tmpk8v05wku\\fmt_01.c:15:1: error: expected identifier or '(' before '}' token\n }\n ^\n",
+    "error": "Compilation failed: C:\\Users\\singh\\AppData\\Local\\Temp\\tmpk8v05wku\\fmt_01.c:14:8: error: expected '=', ',', ';', 'asm' or '__attribute__' before numeric constant\n }eturn 0;\n        ^\nC:\\Users\\singh\\AppData\\Local\\Temp\\tmpk8v05wku\\fmt_01.c:15:1: error: expected identifier or '(' before '}' token\n }\n ^\n"
+  },
+  "elapsed_seconds": 110.391,
+  "usage": {
+    "calls": 6,
+    "input_tokens": 7765,
+    "output_tokens": 12309,
+    "total_tokens": 20074,
+    "cost_usd": 0.0
+  }
+}

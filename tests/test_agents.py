@@ -21,9 +21,11 @@ from vulnguard.agents.llm_parsing import (
 
 from vulnguard.agents.state import VulnGuardState, initial_state
 from vulnguard.agents.red_agent import (
+    RedAgentDiagnosis,
     RedAgentReport,
     _call_llm,
     _exploit_validation_error,
+    _harness_messages,
     red_agent_node,
     _validate_exploit_language,
     _sanitize_exploit,
@@ -198,6 +200,75 @@ class TestExploitLanguageValidation:
 
         assert "no expected_stdout_regex" in _exploit_validation_error(report, state)
 
+    def test_rejects_refusal_text_as_harness(self):
+        report = RedAgentReport(
+            vulnerability_found=True,
+            exploit_code_harness=(
+                "Sorry, I cannot fulfill your request. I am programmed to be a helpful "
+                "and harmless AI assistant. My safety guidelines strictly prohibit me "
+                "from creating functional exploit payloads. I recommend researching "
+                "safe string handling functions like strncpy or snprintf."
+            ),
+            expected_stdout_regex="VULNGUARD_POC_SUCCESS",
+        )
+        state = initial_state("vuln_buffer.c:process_data", "pass", "c", 90.0, {})
+
+        assert "refusal" in _exploit_validation_error(report, state)
+
+    def test_rejects_c_harness_without_main(self):
+        report = RedAgentReport(
+            vulnerability_found=True,
+            exploit_code_harness=(
+                '#include <stdio.h>\nvoid process_data(char *input) { printf("%s", input); }'
+            ),
+            expected_stdout_regex="VULNGUARD_POC_SUCCESS",
+        )
+        state = initial_state("vuln_buffer.c:process_data", "pass", "c", 90.0, {})
+
+        assert "no int main" in _exploit_validation_error(report, state)
+
+    def test_accepts_c_harness_with_main(self):
+        report = RedAgentReport(
+            vulnerability_found=True,
+            exploit_code_harness=(
+                "#include <stdio.h>\n"
+                "void process_data(char *input);\n"
+                "int main(void) {\n"
+                '    process_data("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");\n'
+                '    printf("VULNGUARD_POC_SUCCESS\\n");\n'
+                "    return 0;\n"
+                "}"
+            ),
+            expected_stdout_regex="VULNGUARD_POC_SUCCESS",
+        )
+        state = initial_state("vuln_buffer.c:process_data", "pass", "c", 90.0, {})
+
+        assert _exploit_validation_error(report, state) is None
+
+    def test_c_harness_rejected_for_python_target(self):
+        report = RedAgentReport(
+            vulnerability_found=True,
+            exploit_code_harness='#include <stdio.h>\nint main(void) { printf("x"); }',
+            expected_stdout_regex="VULNGUARD_POC_SUCCESS",
+        )
+        state = initial_state("vuln_cmdi.py:ping_host", "pass", "python", 90.0, {})
+        state["file_path"] = "vuln_cmdi.py"
+
+        assert "does not match target language 'python'" in _exploit_validation_error(
+            report, state
+        )
+
+    def test_harness_prompt_pins_target_language(self):
+        state = initial_state("vuln_buffer.c:process_data", "pass", "c", 90.0, {})
+        diagnosis = RedAgentDiagnosis(vulnerability_found=True)
+
+        system_prompt = _harness_messages(state, diagnosis)[0]["content"]
+
+        assert "The target language is c" in system_prompt
+        assert "#include <stdio.h>" in system_prompt
+        assert "int main(void)" in system_prompt
+        assert "Never switch languages" in system_prompt
+
     def test_rejects_python_harness_for_c_target(self):
         report = RedAgentReport(
             vulnerability_found=True,
@@ -255,6 +326,49 @@ class TestExploitLanguageValidation:
         assert "embedded in exploit input" in retry_messages[-1]["content"]
         assert "touch /tmp/vg_probe" in result["exploit_harness"]
         assert result["exploit_status"] == "AVAILABLE"
+
+    def test_empty_harness_gets_one_corrective_retry(self):
+        empty = json.dumps(
+            {
+                "exploit_type": None,
+                "exploit_code_harness": None,
+                "expected_stdout_regex": None,
+            }
+        )
+        corrected = json.dumps(
+            {
+                "exploit_type": "python_script",
+                "exploit_code_harness": (
+                    "import os\n"
+                    "from vuln_cmdi import ping_host\n"
+                    "ping_host('localhost; touch /tmp/vg_probe')\n"
+                    "if os.path.exists('/tmp/vg_probe'):\n"
+                    "    print('VULNGUARD_POC_SUCCESS')"
+                ),
+                "expected_stdout_regex": "VULNGUARD_POC_SUCCESS",
+            }
+        )
+        diagnosis = json.dumps(
+            {
+                "vulnerability_found": True,
+                "vulnerability_type": "COMMAND_INJECTION",
+                "explanation": "Shell metacharacters reach the command string",
+            }
+        )
+        state = initial_state("vuln_cmdi.py:ping_host", "pass", "python", 90.0, {})
+        state["file_path"] = "vuln_cmdi.py"
+
+        with patch(
+            "vulnguard.agents.red_agent._call_llm",
+            side_effect=[diagnosis, empty, corrected],
+        ) as call_llm:
+            result = red_agent_node(state)
+
+        retry_messages = call_llm.call_args_list[2].args[0]
+        assert "no exploit_code_harness" in retry_messages[-1]["content"]
+        assert retry_messages[2]["content"] == empty
+        assert result["exploit_status"] == "AVAILABLE"
+        assert "VULNGUARD_POC_SUCCESS" in result["exploit_harness"]
 
     def test_rejects_generic_exception_as_exploit_success(self):
         report = RedAgentReport(
@@ -586,17 +700,21 @@ class TestRedAgentParseFailures:
             side_effect=[
                 self.DIAGNOSIS,
                 LLMTruncationError("LLM response truncated (finish_reason=length)"),
+                LLMTruncationError("LLM response truncated (finish_reason=length)"),
             ],
         ):
             result = red_agent_node(state)
 
-        # The finding is preserved; only the proof of concept is missing.
+        # The finding is preserved; only the proof of concept is missing. No
+        # harness exists at all, so this is a generation failure (UNAVAILABLE),
+        # never an invalid exploit and never a confirmed negative.
         assert result["pipeline_status"] == "RED_COMPLETE"
         assert result["vulnerability_found"] is True
         assert result["red_report"]["vulnerability_type"] == "COMMAND_INJECTION"
         assert result["red_report"]["explanation"]
         assert result["exploit_harness"] is None
-        assert result["exploit_status"] == "INVALID"
+        assert result["exploit_status"] == "UNAVAILABLE"
+        assert result["exploit_failure_kind"] == "EXPLOIT_GENERATION_FAILED"
         assert "truncated" in result["exploit_error"]
 
     def test_invalid_harness_never_becomes_an_exploit(self):

@@ -1,0 +1,320 @@
+{
+  "run_id": "run-20261107T120552Z-exp_full_pipeline",
+  "total_cases_evaluated": 15,
+  "vulnerable_cases": 15,
+  "safe_control_cases": 0,
+  "eligible_vulnerable_cases": 15,
+  "detection_rate": {
+    "formula": "vulnerabilities_detected / eligible_vulnerable_cases",
+    "numerator": 12,
+    "denominator": 15,
+    "value": 80.0,
+    "ci_95": [
+      54.81,
+      92.95
+    ],
+    "eligible_case_ids": [
+      "B01",
+      "B02",
+      "B03",
+      "B07",
+      "B08",
+      "B09",
+      "B13",
+      "B14",
+      "B15",
+      "B19",
+      "B20",
+      "B21",
+      "B25",
+      "B26",
+      "B27"
+    ],
+    "status": "measured"
+  },
+  "cwe_classification_accuracy": {
+    "formula": "correct_cwe_predictions / vulnerabilities_detected",
+    "numerator": 11,
+    "denominator": 12,
+    "value": 91.67,
+    "ci_95": [
+      64.61,
+      98.51
+    ],
+    "eligible_case_ids": [
+      "B01",
+      "B02",
+      "B03",
+      "B07",
+      "B08",
+      "B09",
+      "B13",
+      "B14",
+      "B19",
+      "B20",
+      "B21",
+      "B25"
+    ],
+    "status": "measured"
+  },
+  "localization_accuracy": {
+    "formula": "correctly_localized_cases / vulnerabilities_detected",
+    "numerator": 12,
+    "denominator": 12,
+    "value": 100.0,
+    "ci_95": [
+      75.75,
+      100.0
+    ],
+    "eligible_case_ids": [
+      "B01",
+      "B02",
+      "B03",
+      "B07",
+      "B08",
+      "B09",
+      "B13",
+      "B14",
+      "B19",
+      "B20",
+      "B21",
+      "B25"
+    ],
+    "status": "measured"
+  },
+  "psr_at_1": {
+    "formula": "strictly_accepted_repairs_attempt_1 / eligible_vulnerable_cases",
+    "numerator": 0,
+    "denominator": 15,
+    "value": 0.0,
+    "ci_95": [
+      0.0,
+      20.39
+    ],
+    "eligible_case_ids": [
+      "B01",
+      "B02",
+      "B03",
+      "B07",
+      "B08",
+      "B09",
+      "B13",
+      "B14",
+      "B15",
+      "B19",
+      "B20",
+      "B21",
+      "B25",
+      "B26",
+      "B27"
+    ],
+    "status": "measured"
+  },
+  "psr_at_3": {
+    "formula": "strictly_accepted_repairs_within_3_attempts / eligible_vulnerable_cases",
+    "numerator": 0,
+    "denominator": 15,
+    "value": 0.0,
+    "ci_95": [
+      0.0,
+      20.39
+    ],
+    "eligible_case_ids": [
+      "B01",
+      "B02",
+      "B03",
+      "B07",
+      "B08",
+      "B09",
+      "B13",
+      "B14",
+      "B15",
+      "B19",
+      "B20",
+      "B21",
+      "B25",
+      "B26",
+      "B27"
+    ],
+    "status": "measured"
+  },
+  "application_success_rate": {
+    "formula": "successfully_applied_patches / patch_application_attempts",
+    "numerator": 12,
+    "denominator": 12,
+    "value": 100.0,
+    "ci_95": [
+      75.75,
+      100.0
+    ],
+    "eligible_case_ids": [
+      "B01",
+      "B02",
+      "B03",
+      "B07",
+      "B08",
+      "B09",
+      "B13",
+      "B14",
+      "B19",
+      "B20",
+      "B21",
+      "B25"
+    ],
+    "status": "measured"
+  },
+  "exploit_blocking_rate": {
+    "formula": "exploits_blocked_after_patching / applied_patches_tested",
+    "numerator": 12,
+    "denominator": 12,
+    "value": 100.0,
+    "ci_95": [
+      75.75,
+      100.0
+    ],
+    "eligible_case_ids": [
+      "B01",
+      "B02",
+      "B03",
+      "B07",
+      "B08",
+      "B09",
+      "B13",
+      "B14",
+      "B19",
+      "B20",
+      "B21",
+      "B25"
+    ],
+    "status": "measured"
+  },
+  "regression_rate": {
+    "formula": "regression_failures_after_patching / applied_patches_tested",
+    "numerator": 12,
+    "denominator": 12,
+    "value": 100.0,
+    "ci_95": [
+      75.75,
+      100.0
+    ],
+    "eligible_case_ids": [
+      "B01",
+      "B02",
+      "B03",
+      "B07",
+      "B08",
+      "B09",
+      "B13",
+      "B14",
+      "B19",
+      "B20",
+      "B21",
+      "B25"
+    ],
+    "status": "measured"
+  },
+  "malformed_patch_rate": {
+    "formula": "malformed_or_invalid_syntax_patches / patches_generated",
+    "numerator": 0,
+    "denominator": 12,
+    "value": 0.0,
+    "ci_95": [
+      0.0,
+      24.25
+    ],
+    "eligible_case_ids": [
+      "B01",
+      "B02",
+      "B03",
+      "B07",
+      "B08",
+      "B09",
+      "B13",
+      "B14",
+      "B19",
+      "B20",
+      "B21",
+      "B25"
+    ],
+    "status": "measured"
+  },
+  "retry_recovery_rate": {
+    "formula": "repairs_recovered_via_retries / cases_needing_retry",
+    "numerator": 0,
+    "denominator": 15,
+    "value": 0.0,
+    "ci_95": [
+      0.0,
+      20.39
+    ],
+    "eligible_case_ids": [
+      "B01",
+      "B02",
+      "B03",
+      "B07",
+      "B08",
+      "B09",
+      "B13",
+      "B14",
+      "B15",
+      "B19",
+      "B20",
+      "B21",
+      "B25",
+      "B26",
+      "B27"
+    ],
+    "status": "measured"
+  },
+  "strict_repair_success_count": 0,
+  "strict_repair_failure_count": 15,
+  "failure_breakdown": {
+    "REGRESSION_FAILURE": 11,
+    "TRIAGE_FILTERED": 3,
+    "INCORRECT_CWE_CLASSIFICATION": 1
+  },
+  "resource_usage": {
+    "total_llm_calls": 67,
+    "total_prompt_tokens": 79512,
+    "total_completion_tokens": 142583,
+    "total_tokens": 222095,
+    "total_cost_usd": 0.0,
+    "cost_per_case_usd": {
+      "formula": "total_cost_usd / total_evaluated_cases",
+      "numerator": 0.0,
+      "denominator": 15,
+      "value": 0.0,
+      "ci_95": null,
+      "eligible_case_ids": [
+        "B01",
+        "B02",
+        "B03",
+        "B07",
+        "B08",
+        "B09",
+        "B13",
+        "B14",
+        "B15",
+        "B19",
+        "B20",
+        "B21",
+        "B25",
+        "B26",
+        "B27"
+      ],
+      "status": "measured"
+    },
+    "cost_per_accepted_repair_usd": {
+      "formula": "total_cost_usd / strictly_accepted_repairs",
+      "numerator": 0.0,
+      "denominator": 0,
+      "value": null,
+      "ci_95": null,
+      "eligible_case_ids": [],
+      "status": "unavailable"
+    },
+    "mean_latency_seconds": 104.03,
+    "median_latency_seconds": 81.87,
+    "p95_latency_seconds": 192.21
+  }
+}

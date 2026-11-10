@@ -48,6 +48,10 @@ class VulnGuardState(TypedDict):
     # defect found" from "defect found but no usable proof of concept".
     exploit_status: str
     exploit_error: Optional[str]
+    # "" | EXPLOIT_GENERATION_FAILED | HARNESS_INVALID — why no usable harness
+    # exists. Generation failure (refusal/truncation/empty) is never evidence
+    # that the vulnerability is absent.
+    exploit_failure_kind: str
 
     # ── Blue Agent outputs ────────────────────────────────────────────
     patched_code: Optional[str]
@@ -60,6 +64,11 @@ class VulnGuardState(TypedDict):
     exploit_blocked: bool
     judge_verdict: str  # PASS | BUILD_FAILED | TESTS_FAILED | etc.
     error_logs: Optional[str]
+    # True only when a valid harness demonstrated the defect on the original code.
+    exploit_confirmed: bool
+    # True only for a Judge PASS: exploit reproduced, patch blocked it, and the
+    # build/test steps that ran did not fail.
+    security_validated: bool
 
     # ── Retry management ──────────────────────────────────────────────
     attempt_number: int
@@ -103,6 +112,7 @@ def initial_state(
         expected_stdout_regex=None,
         exploit_status="NONE",
         exploit_error=None,
+        exploit_failure_kind="",
         # Blue outputs
         patched_code=None,
         patch_justification=None,
@@ -113,6 +123,8 @@ def initial_state(
         exploit_blocked=False,
         judge_verdict="",
         error_logs=None,
+        exploit_confirmed=False,
+        security_validated=False,
         # Retry
         attempt_number=0,
         attempt_history=[],

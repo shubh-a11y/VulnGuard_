@@ -32,6 +32,12 @@ class JudgeVerdict(str, Enum):
     EXPLOIT_INVALID = "EXPLOIT_INVALID"
     # No usable harness was produced, so the patch could not be proven secure.
     EXPLOIT_UNAVAILABLE = "EXPLOIT_UNAVAILABLE"
+    # The model refused, truncated, or returned nothing usable — a generation
+    # failure, never evidence that the vulnerability is absent.
+    EXPLOIT_GENERATION_FAILED = "EXPLOIT_GENERATION_FAILED"
+    # A harness was produced but rejected by static validation (wrong language,
+    # redefined target, missing success signal) before it could be executed.
+    HARNESS_INVALID = "HARNESS_INVALID"
     # The harness/target failed to build or run — not a security result.
     EXPLOIT_EXECUTION_ERROR = "EXPLOIT_EXECUTION_ERROR"
     EXPLOIT_NOT_BLOCKED = "EXPLOIT_NOT_BLOCKED"
@@ -81,6 +87,8 @@ TERMINAL_FAILURE_VERDICTS = frozenset(
         JudgeVerdict.EXPLOIT_NOT_REPRODUCED,
         JudgeVerdict.EXPLOIT_INVALID,
         JudgeVerdict.EXPLOIT_UNAVAILABLE,
+        JudgeVerdict.EXPLOIT_GENERATION_FAILED,
+        JudgeVerdict.HARNESS_INVALID,
         JudgeVerdict.EXPLOIT_EXECUTION_ERROR,
     }
 )
@@ -274,6 +282,20 @@ def _validate(state: VulnGuardState) -> tuple[JudgeVerdict, str]:
     exploit_status = state.get("exploit_status") or (
         "AVAILABLE" if state.get("exploit_harness") else "NONE"
     )
+    failure_kind = state.get("exploit_failure_kind") or ""
+    if failure_kind == "EXPLOIT_GENERATION_FAILED":
+        return (
+            JudgeVerdict.EXPLOIT_GENERATION_FAILED,
+            "No executable proof of concept could be generated for this finding, "
+            "so the patch was NOT security-validated. This is an exploit-generation "
+            f"failure, not evidence that the vulnerability is absent. {state.get('exploit_error') or ''}".strip(),
+        )
+    if failure_kind == "HARNESS_INVALID":
+        return (
+            JudgeVerdict.HARNESS_INVALID,
+            "The generated harness was rejected before execution, so the patch was "
+            f"NOT security-validated. {state.get('exploit_error') or ''}".strip(),
+        )
     if exploit_status in {"INVALID", "ERROR"}:
         return (
             JudgeVerdict.EXPLOIT_INVALID,
@@ -423,6 +445,11 @@ def judge_agent_node(state: VulnGuardState) -> dict[str, Any]:
         "build_success": not sandbox_unavailable and verdict != JudgeVerdict.BUILD_FAILED,
         "test_success": not sandbox_unavailable and verdict != JudgeVerdict.TESTS_FAILED,
         "exploit_blocked": verdict == JudgeVerdict.PASS,
+        # Distinguish the three claims the UI must not merge: the defect was
+        # reproduced, the patch stopped it, and the patch was security-validated.
+        "exploit_confirmed": verdict
+        in (JudgeVerdict.PASS, JudgeVerdict.EXPLOIT_NOT_BLOCKED),
+        "security_validated": verdict == JudgeVerdict.PASS,
         "timestamps": {**state.get("timestamps", {}), "judge_end": time.time()},
     }
 

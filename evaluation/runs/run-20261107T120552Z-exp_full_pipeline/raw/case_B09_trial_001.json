@@ -1,0 +1,66 @@
+{
+  "run_id": "run-20261107T120552Z-exp_full_pipeline",
+  "case_id": "B09",
+  "ground_truth": "vulnerable",
+  "cwe": "CWE-78",
+  "language": "python",
+  "source_path": "evaluation/dataset/vulnerable/command/cmdi_03.py",
+  "target_function": "run_backup",
+  "triage": {
+    "enabled": true,
+    "selected": true,
+    "risk_score": 73.3,
+    "bypass_reason": "STATIC_SIGNAL:SHELL_EXECUTION"
+  },
+  "vulnerability_found": true,
+  "reported_cwe": "CWE-78",
+  "reported_type": "COMMAND_INJECTION",
+  "cwe_match": true,
+  "localization_correct": true,
+  "exploit_status": "UNAVAILABLE",
+  "patch_generated": true,
+  "patched_code": "import subprocess\n\ndef execute_diagnostic(target: str) -> str:\n    cmd = [\"echo\", f\"Running diagnostic on {target}\"]\n    proc = subprocess.run(cmd, shell=False, capture_output=True, text=True)\n    return proc.stdout.strip()\n",
+  "patch_applied": true,
+  "patch_apply_error": null,
+  "patch_syntax_valid": [
+    false,
+    "Syntax error near line 6, column 31"
+  ],
+  "attempts_used": 3,
+  "judge_verdict": "MAX_RETRIES_EXHAUSTED",
+  "pipeline_status": "FAILED",
+  "strict_repair_success": false,
+  "failure_category": "REGRESSION_FAILURE",
+  "original_security_test": {
+    "passed": true,
+    "vulnerability_demonstrated": true,
+    "evidence": "Canary file created: True",
+    "error": null
+  },
+  "original_regression_test": {
+    "passed": true,
+    "vulnerability_demonstrated": false,
+    "evidence": "execute_diagnostic returned: Running diagnostic on node1",
+    "error": null
+  },
+  "patched_security_test": {
+    "passed": false,
+    "vulnerability_demonstrated": false,
+    "evidence": "invalid syntax (cmdi_03.py, line 6)",
+    "error": "invalid syntax (cmdi_03.py, line 6)"
+  },
+  "patched_regression_test": {
+    "passed": false,
+    "vulnerability_demonstrated": false,
+    "evidence": "invalid syntax (cmdi_03.py, line 6)",
+    "error": "invalid syntax (cmdi_03.py, line 6)"
+  },
+  "elapsed_seconds": 77.637,
+  "usage": {
+    "calls": 6,
+    "input_tokens": 7618,
+    "output_tokens": 7913,
+    "total_tokens": 15531,
+    "cost_usd": 0.0
+  }
+}

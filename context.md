@@ -35,7 +35,7 @@ Docs: `README.md`, `project_description.md`. `skills-lock.json`, `.agrules`, `pr
 
 ### 2.3 State & agents graph: `agents/`
 - `state.py` — `VulnGuardState` (TypedDict) with keys `function_id`, `code`, `language`, `risk_score`, `context_bundle`, `file_path`, `repo_root`, `start_byte`, `end_byte`, `max_attempts`, `attempt_number`, `scan_id`, `timestamps`, `red_report`, `blue_report`, `judge_report`, `patch`, `executed_patch`, `vulnerability_found`, `judge_verdict`, `pipeline_status`, `error_logs`, `rich_output`, `metrics`, `feature_vector`, `embedding`, `retriever_top_k`, `retriever_scores`, `local_context`, `final_report`, etc.
-- `red_agent.py` — `red_agent_node`: two bounded model calls. (1) `RedAgentDiagnosis` (compact JSON: type/CWE/severity/short explanation); (2) `RedAgentHarness` (minimal PoC) only when a defect is diagnosed. Both merge into `RedAgentReport` (the single shape consumed downstream). A failed/truncated harness preserves the diagnosis and sets `exploit_status=INVALID|UNAVAILABLE` with `exploit_error`. Never raises: all failures become `RED_ERROR` state.
+- `red_agent.py` — `red_agent_node`: two bounded model calls. (1) `RedAgentDiagnosis` (compact JSON: type/CWE/severity/short explanation); (2) `RedAgentHarness` (minimal PoC) only when a defect is diagnosed. Both merge into `RedAgentReport` (the single shape consumed downstream). A failed/truncated harness preserves the diagnosis and sets `exploit_status=INVALID|UNAVAILABLE` with `exploit_error`. A harness that parses but is empty (all-null fields) or invalid gets exactly one corrective retry; the harness prompt and the correction prompt carry the JSON schema and require a non-empty `exploit_code_harness` plus `expected_stdout_regex` (marker convention `VULNGUARD_POC_SUCCESS`). Never raises: all failures become `RED_ERROR` state.
 - `blue_agent.py` — parse/retry with `BLUE_ERROR` + `PATCH_GENERATION_FAILED` on exhaustion; never raises.
 - `llm_parsing.py` — shared response handling: `strip_code_fences`, `parse_agent_json(raw, schema)` (returns `(instance, failure_reason)`, never a default negative), `unwrap_schema_payload`, `is_truncated_response`/`finish_reason`, `raw_response_preview` (log-safe 400-char previews).
 - `llm_calls.py` — shared bounded invocation (`call_llm_json`) used by Red and Blue: doubles `max_tokens` on truncation up to `cfg.llm.max_token_ceiling` and stops immediately at the ceiling, retries only transient provider errors (rate limit/timeout/connection) with capped backoff, fails fast on permanent errors, and raises typed `LLMTruncationError` / `LLMProviderError` carrying `attempts_used`, `finish_reason`, `partial_response`.
@@ -74,7 +74,7 @@ Docs: `README.md`, `project_description.md`. `skills-lock.json`, `.agrules`, `pr
   - `GET /api/health` — `{"status": "ok", "timestamp"}`
   - `GET /api/scan/status` — `{"scans": {...}}`
   - `GET /api/scan/verdict-distribution` — judge verdict counts
-  - `GET /api/scan/successful-fixes?limit=20` — recent `pipeline_status=COMPLETE AND judge_verdict=PASS` scans (validated only) with patch preview; `limit` must be 1-100 (422 otherwise); unreadable legacy `result_json` rows are logged and skipped; real store failures return 500 with the traceback in the server log
+  - `GET /api/scan/successful-fixes?limit=20` — recent `pipeline_status=COMPLETE AND judge_verdict=PASS` scans (validated only) with patch preview; `limit` must be 1-100 (422 otherwise); unreadable legacy `result_json` rows are logged and skipped; real store failures return 500 with the traceback in the server log. The dashboard no longer calls this endpoint (see §11.7); it is kept for API/research consumers.
   - `GET /api/results/{scan_id}`, `GET /api/metrics` (total_scans, vulnerabilities_found, patches_validated, patch_rate)
   - `POST /upload` — multipart file upload → `_save_upload` → returns `{upload_id, repository, files_scanned, functions[]}`
   - `POST /upload/folder` — ZIP upload with paths
@@ -93,11 +93,11 @@ Docs: `README.md`, `project_description.md`. `skills-lock.json`, `.agrules`, `pr
 ### 2.12 Dashboard UI (frontend)
 - `ui/src/App.tsx` — mounts `<Dashboard/>`.
 - `ui/src/components/Dashboard.tsx` — main page:
-  - Left column: file upload, detected-function list with single/batch scan, recent-scan history.
+  - Left column: file upload, detected-function list with single/batch scan, recent-scan history, and the browser-local **Stored output** panel (reopen or delete individual finished streams, or delete all). See §10.
   - Right column: **Live Agent Stream** (`AgentFeed`) over WebSocket `ws://localhost:8000/ws/scan`; progress/colour/cancel.
-  - Bottom analytics section: 4 metric cards (`total_scans`, `vulnerabilities_found`, `patches_validated`, patch success %), 3 model-health cards, verdict chips, recent validated-fix list, figures grid + "Re-run evaluation" button.
+  - Bottom analytics section: 4 metric cards (`total_scans`, `vulnerabilities_found`, `patches_validated`, patch success %), 3 model-health cards, verdict chips, figures grid + "Re-run evaluation" button. The former "Recent validated fixes" panel was removed (§11.7).
   - Fetches REST endpoints from `http://localhost:8000` (hardcoded base; see reachability note in 2.13).
-- `ui/src/components/AgentFeed.tsx` — renders the event stream items with typing for `batch_function`, `update`, `patch`, `executed_patch`, `complete`, `error`, `skip`.
+- `ui/src/components/AgentFeed.tsx` — multi-function stream: one card per function (`scanId::functionId`), each with a header plus independent Red / Blue / Judge sections and an event log. The per-function state lives in `ui/src/lib/functionStreams.ts` (§11.5–§11.6).
 - `ui/src/components/dashboard/MetricCards.tsx` — styled `MetricCard` + `ModelHealthCard` (with lucide icons per color).
 - `ui/src/lib/utils.ts` — `cn()` class merger; `index.css` — custom CSS variables (gradients, glassmorphism classes) + Tailwind-like utilities.
 - `ui/vite.config.ts` — Vite 8 (-oxc), proxy for `/api` and `ws://` to the backend, `react-refresh`. Dev server on port 5173 (implied).
@@ -376,3 +376,400 @@ pre-existing. The evaluation added only: `evaluation/run-2026-10-28T-baseline/**
 this section of `context.md`. Fixture mtimes are unchanged (2026-09-16) and no patch backups were
 created. `data/llm_usage.jsonl` grew 87 → 123 records because the application logs its own provider
 usage — expected runtime telemetry, not a source/config/dataset change.
+
+---
+
+## 10. Harness-abstention fix + persistent scan output (2026-11-04)
+
+### 10.1 Why scans showed "Exploit Unavailable" / `EXPLOIT_INVALID`
+
+The Red Agent diagnosis was correct; the *harness* call returned a schema-valid JSON object with
+`exploit_code_harness: null` and `expected_stdout_regex: null` (verified in
+`evaluation/run-2026-10-28T-baseline/cases/C01.json`, `C02.json`, `C04.json`, `C05.json`). Two code
+paths made that abstention unrecoverable:
+
+1. `_generate_harness` returned immediately when `exploit_code_harness` was empty, so an empty
+   harness got **no** corrective retry, unlike an invalid-but-present one.
+2. The harness system prompt did not include the JSON schema, and `_HARNESS_CORRECTION_PROMPT`
+   restated only a one-line reason — neither told the model that both fields are required.
+
+Downstream this is correct, honest behavior: `_validate` rejects `exploit_status=INVALID` and the
+Judge returns `EXPLOIT_INVALID` → `FAILED`, because no PoC can prove the patch. It was not a triage
+or Blue Agent bug. `SANDBOX_UNAVAILABLE` (no Docker daemon) is a separate verdict.
+
+### 10.2 Changes
+
+- `vulnguard/agents/red_agent.py`
+  - `_HARNESS_SYSTEM_PROMPT` now embeds `_schema_json(RedAgentHarness)`, marks both fields required,
+    forbids null fields, and names `VULNGUARD_POC_SUCCESS` as the recommended marker.
+  - `_HARNESS_CORRECTION_PROMPT` repeats the required JSON shape and the marker/regex requirement.
+  - `_generate_harness` treats an empty harness as a validation failure and uses the existing
+    single corrective retry; a still-empty retry reports
+    `<reason>; the model did not provide an exploit harness`.
+- `ui/src/lib/scanOutputStore.ts` (new) — localStorage store (`vulnguard.scan_outputs.v1`) of finished
+  scan streams: newest first, `MAX_STORED_OUTPUTS = 20`, 2 MB budget that drops oldest runs, corrupt
+  JSON/malformed rows ignored, quota/disabled-storage failures logged but never break a scan.
+- `ui/src/components/Dashboard.tsx` — each function run is captured into a `StoredScanOutput` written
+  on terminal event/disconnect; the newest stored run is restored on mount; new "Stored output"
+  panel in the left column with per-run **Open**, per-run **Delete**, and **Delete all**
+  (disabled while a scan is running). Live feed behavior is unchanged.
+- `ui/src/lib/scanOutputStore.test.ts` (new, 4 tests) — ordering/upsert, cap, delete/clear, corrupt
+  data.
+- `tests/test_agents.py` — `test_empty_harness_gets_one_corrective_retry` (empty harness → one
+  correction → `exploit_status=AVAILABLE`).
+
+### 10.3 Checks run
+
+- `.venv/Scripts/python.exe -m pytest tests/test_agents.py -q` → **70 passed**.
+- `cd ui && npx vitest run` → **16 passed** (12 AgentFeed + 4 store).
+- `npx tsc -b` → OK; `npx vite build` → OK; `npx oxlint` → 0 warnings/errors.
+
+### 10.4 Remaining limitations
+
+- Not re-run against live Gemini: the prompt/retry change targets the observed null-field
+  response, but harness quality for race conditions (TOCTOU) and SQLi can still be insufficient.
+  Those cases should end as `EXPLOIT_UNAVAILABLE`, which is the honest outcome, not a PASS.
+- Stored output is browser-local only (per origin/profile). It is not synced with the SQLite
+  `scans` table, and clearing site data removes it.
+
+### 10.5 Language and refusal hardening (2026-11-05)
+
+Live runs after §10.2 showed two remaining harness failures:
+
+- `the harness does not match target language 'python'` — the harness was written in another
+  language (or as a shell command), because the prompt never pinned the harness language beyond
+  naming the target.
+- A C target accepted a prose refusal (“Sorry, I cannot fulfill your request…”) as the harness: the
+  old check only looked for *any* language keyword, and the refusal mentioned `strncpy`/`snprintf`.
+  It then compiled as C and failed with `EXPLOIT_EXECUTION_ERROR`.
+
+Note this was not introduced by the §10.2 empty-harness retry: `_validate_exploit_language` and the
+“corrected harness still invalid” path already exist at HEAD (`git show HEAD:...`). Requiring
+non-empty fields made the model abstain less but refuse/produce foreign code more, which exposed
+the weak validator.
+
+Fixes in `vulnguard/agents/red_agent.py`:
+
+- `_REFUSAL_PATTERN` + `_looks_like_prose` reject apologies, refusals, and sentence-only payloads
+  before any language check (`the harness is an explanation or refusal, not runnable code`).
+- `_LANGUAGE_MARKERS` now requires real syntax per language (e.g. `#include`, `int main` for C;
+  `import`/`from … import` for Python) and `_FOREIGN_LANGUAGE_MARKERS` rejects a harness that
+  contains another language's markers.
+- C/C++ harnesses must define `int main()` (`the C harness has no int main() entry point`).
+- The harness system and correction prompts now state “The target language is {language} … nothing
+  else”, forbid switching languages and refusing, and embed a runnable per-language skeleton
+  (`_HARNESS_CODE_SHAPES`: Python import+call+marker, C `main` + target prototype, C++, Java
+  `Exploit` class, JavaScript `require`).
+- `Dashboard.tsx` no longer appends `WebSocket connection failed` after the backend has already
+  sent a terminal `error`/`complete` event.
+- Tests (`tests/test_agents.py`): refusal text rejected, C harness without `main` rejected, valid C
+  harness accepted, C harness rejected for a Python target, prompt pins the target language.
+
+Checks: `pytest -q` → **185 passed**; `vitest run` → 16 passed; `tsc -b`, `vite build`, `oxlint` →
+clean.
+
+---
+
+## 11. Reliability + multi-function stream session (2026-11-06) — verified
+
+### 11.1 Scope
+
+Three changes: Red Agent PoC reliability, a persistent per-function Agent Live Stream, and removal
+of the "Recent validated fixes" dashboard panel. Docker isolation, Blue guardrails, the 3-attempt
+retry policy and the SQLite scan table are unchanged.
+
+### 11.2 Per-function task packet (what the Red Agent receives)
+
+Built by `vulnguard/ui/server.py::ws_scan` from the upload payload:
+
+- target function source (byte range re-validated against the uploaded file),
+- language, file path, repo root, function id,
+- ML risk score from `RiskScorer` (plus threshold / high-risk flag),
+- `ContextBundle`: imports (tree-sitter payload + regex fallback), callee signatures (locally
+defined callees and callees resolved from imported local modules), enclosing class header and
+`__init__` signature (`class_context`), type definitions, macros, warnings (dynamic import, FFI,
+circular import), token count bounded by `cfg.agent.context_token_budget`.
+
+Scoping is still function-level: only signatures/declarations and small snippets are added, never
+whole files. `context_result` reports `imports`, `callees`, `token_count`; a small number is now an
+accurate reflection of the code rather than a regex artefact. The CLI (`vulnguard/main.py`) and the
+evaluation harness build the same bundle via `gather_context`.
+
+### 11.3 Red Agent generation (implemented)
+
+Two bounded calls per function:
+
+1. **Diagnosis** (`RedAgentDiagnosis`): `vulnerability_found`, `vulnerability_type`, `cwe_id`,
+   `severity`, `location`, `affected_lines`, `attack_strategy`, `explanation`, `confidence`. One
+   parse repair; a truncated diagnosis gets one compact retry.
+2. **Harness** (`RedAgentHarness`), only when a defect is diagnosed: `exploit_type`,
+   `exploit_code_harness`, `expected_stdout_regex`, `execution_instructions`,
+   `expected_vulnerable_behavior`, `expected_patched_behavior`.
+
+Harness budget: `cfg.llm.harness_max_tokens` (`VULNGUARD_LLM_HARNESS_MAX_TOKENS`, default 8192,
+capped by `max_token_ceiling`). If the harness call truncates or its output fails validation, one
+*smaller* regeneration is requested with a larger budget (`min(2×budget, ceiling)`); harness
+generation is bounded to two calls. Both phases merge into `RedAgentReport` in `red_report`.
+
+### 11.4 Harness validation (before any sandbox execution)
+
+`_exploit_validation_error` rejects, in order: empty harness, prose/refusal, missing
+`expected_stdout_regex`, wrong language (target markers present, foreign markers absent), C/C++
+without `int main`, Python syntax errors, redefinition of the target, missing import of the
+workspace module/class, success marker embedded in exploit input, success reported for any
+exception, invalid regex. The Judge re-runs the same validation before executing a harness.
+
+### 11.5 Failure and verdict semantics
+
+| Situation | `exploit_status` | `exploit_failure_kind` | Judge verdict | Pipeline |
+|---|---|---|---|---|
+| No defect diagnosed | `NONE` | `""` | (no judge) | `RED_COMPLETE` → `COMPLETE` |
+| Refusal/truncation/empty/provider error after retries | `UNAVAILABLE` | `EXPLOIT_GENERATION_FAILED` | `EXPLOIT_GENERATION_FAILED` | `FAILED` (terminal) |
+| Harness produced but statically rejected | `INVALID` | `HARNESS_INVALID` | `HARNESS_INVALID` | `FAILED` (terminal) |
+| No harness available at all | `UNAVAILABLE` | `""` | `EXPLOIT_UNAVAILABLE` | `FAILED` (terminal) |
+| Harness never ran (import/compile failure) | `AVAILABLE` | `""` | `EXPLOIT_EXECUTION_ERROR` | `FAILED` (terminal) |
+| Harness ran, defect not shown | `AVAILABLE` | `""` | `EXPLOIT_NOT_REPRODUCED` | `FAILED` (terminal) |
+| Harness fires on original, blocked by patch | `AVAILABLE` | `""` | `PASS` | `COMPLETE` (`security_validated=True`) |
+| Harness still fires on the patch | `AVAILABLE` | `""` | `EXPLOIT_NOT_BLOCKED` | `RETRY` → Blue (≤3) |
+| Docker unavailable | any | `""` | `SANDBOX_UNAVAILABLE` | `COMPLETE`, not validated |
+
+`EXPLOIT_INVALID` remains for Judge-side invalidity and legacy `exploit_status=INVALID` without a
+kind. Retry routing is unchanged: `RETRYABLE_VERDICTS` return to Blue with real sandbox logs;
+`TERMINAL_FAILURE_VERDICTS` end the run. `max_attempts` = 3 per function. The Judge result now also
+carries `exploit_confirmed` and `security_validated`; `complete` events repeat them.
+
+An inability to generate an exploit is never treated as evidence that the vulnerability is absent,
+and no patch is reported as validated without an actual sandbox dual pass.
+
+### 11.6 WebSocket event architecture
+
+Endpoint `ws://localhost:8000/ws/scan`. The client opens **one socket per function**; the dashboard
+never closes another run's socket. Events: `status`, `triage_result`, `context_result`,
+`agent_update` (`agent` + `state` delta), `complete`, `error`.
+
+- every event carries `scan_id` and `function_id`;
+- `complete` carries `pipeline_status`, `judge_verdict`, `exploit_status`, `exploit_confirmed`,
+  `security_validated`;
+- `error` carries `stage` and a concise message (traceback stays server-side).
+
+The server persists continuously via `ScanStore`: client disconnect → `DISCONNECTED`, unexpected
+failure → `ERROR` + `failed_stage`, stream without a terminal verdict → `FAILED` /
+`PIPELINE_INCOMPLETE`, `RED_ERROR` → `FAILED` / `RED_AGENT_ERROR`.
+
+### 11.7 Multi-function live stream state
+
+`ui/src/lib/functionStreams.ts`:
+
+- `FunctionStream`: key (`streamKey = scanId::functionId`), scan/function identity, `status`
+  (`QUEUED|RUNNING|RETRYING|COMPLETED|PASS|FAIL|INCONCLUSIVE`), `pipelineStatus`, `judgeVerdict`,
+  triage/context, `red`/`blue`/`judge` latest state, attempt counters, exploit status/failure kind,
+  `terminal`, timestamps, `events`, `source` (`live|stored`).
+- `applyStreamEvent` is a pure reducer; `applyEventToStreams(streams, key, event)` updates one record
+  and returns every other record unchanged (same object identity). Identical consecutive events are
+  ignored, and `upsertStream` replaces a card in place so order never changes.
+- `streamFromStoredOutput` replays a stored run through the same reducer, so reopened output renders
+  identical sections and status.
+
+Dashboard behavior: a single scan appends/updates one card for that function; a batch scan
+pre-creates one card per discovered function (10 functions → 10 cards before any agent runs) and runs
+3 concurrently; **Clear** empties the live stream; completed cards remain visible until the user
+clears the stream, opens another target, or navigates away. `AgentFeed` owns the scroll container and
+never auto-scrolls; if the user is scrolled up it shows an "N new updates" button.
+
+Each card: header (function name, path, risk score, classification/CWE, status chip, verdict chip,
+attempt), ML triage/context line, then three independent sections — **Red** (diagnosis, attack
+strategy, harness, harness validation status/failure kind, error/retry), **Blue** (patch status,
+diff/code, justification, retry info, download), **Judge** (sandbox/build/tests, exploit
+reproduced/blocked, security validated, verdict, logs) — plus a pipeline-error card and an event log.
+Long code and log blocks are height-capped and scroll internally, so the dashboard does not widen.
+
+### 11.8 Scan result persistence
+
+- `data/vulnguard.db` (`scans` table) is the authoritative scan history/patches; unchanged.
+- `ui/src/lib/scanOutputStore.ts` + localStorage `vulnguard.scan_outputs.v1` keeps finished stream
+  output (max 20 runs, 2 MB budget, newest first, browser-local only).
+- `GET /api/scan/successful-fixes` and `ScanStore.successful_fixes` still return validated `PASS`
+  rows for API/research consumers. The dashboard no longer requests them: the "Recent validated
+  fixes" panel, its `SuccessfulFix` type, `fixes` state and request were removed.
+
+### 11.9 Configuration (no secrets)
+
+`VULNGUARD_LLM_HARNESS_MAX_TOKENS` (8192), `VULNGUARD_LLM_MAX_TOKENS` (4096),
+`VULNGUARD_LLM_MAX_TOKEN_CEILING` (16384), `VULNGUARD_LLM_MAX_RETRIES` (3), `VULNGUARD_LLM_TIMEOUT`,
+`VULNGUARD_LLM_TEMPERATURE`, `VULNGUARD_MAX_RETRIES` (agent attempts, 3),
+`VULNGUARD_CONTEXT_TOKEN_BUDGET` (6000), `VULNGUARD_DOCKER_*`, `VULNGUARD_SANDBOX_IMAGE`,
+`VULNGUARD_MOCK_LLM`; `GEMINI_API_KEY` lives only in `.env`. The frontend hardcodes
+`http://localhost:8000` and `ws://localhost:8000`.
+
+### 11.10 Important files for these areas
+
+`vulnguard/agents/{red_agent,judge_agent,state,llm_parsing}.py`, `vulnguard/config.py`,
+`vulnguard/data/context_gatherer.py`, `vulnguard/ui/server.py`; `ui/src/lib/functionStreams.ts`,
+`ui/src/components/{AgentFeed,Dashboard}.tsx`; tests listed in `changes.md`.
+
+### 11.11 Tests and known limitations
+
+Verified this session: `pytest -q` → 197 passed; `npx vitest run` → 25 passed; `tsc -b`, `oxlint`
+(0/0), `vite build` → clean.
+
+Limitations: live Gemini harness quality for race conditions and SQLi can still be insufficient —
+those runs now end `EXPLOIT_UNAVAILABLE` / `EXPLOIT_GENERATION_FAILED` rather than PASS; Docker
+dual-pass execution is covered only by mocked runners in this session; the new stream was validated
+by component tests, not a browser session; the Judge's build/test steps remain vacuous for fixtures
+without a build system or collected tests (§9.5); `patcher.py::apply_patch` still raises `NameError`
+(§9.5).
+
+---
+
+## 12. Generalization + vertical live stream (2026-11-06)
+
+### 12.1 What the product is
+
+VulnGuard is a **general-purpose vulnerability analysis and remediation system**. It accepts an
+arbitrary repository (ZIP, folder upload, GitHub-style tree on disk, or a single source file),
+triages every parsed function, and runs Red → Blue → Judge on the functions above the risk
+threshold. Nothing in the production pipeline assumes a particular project, module layout, package
+manager, database, test framework or function name.
+
+### 12.2 Role of `data/test_vulns`
+
+`data/test_vulns` is a **regression-testing dataset**, not the foundation of the Red Agent. It
+contains six labeled scenarios (C01–C06: C buffer overflow, C format string, C TOCTOU, Python command
+injection, Python SQL injection, cross-file Python taint flow). It is used by:
+
+- `tests/test_generalization.py` — to prove the generic pipeline still handles the labeled cohort;
+- `vulnguard/evaluation.py` — the research/evaluation runner, which owns its label list;
+- the fixture comments themselves.
+
+The production Red Agent (`vulnguard/agents/red_agent.py`) and every adapter under
+`vulnguard/agents/harness/` contain **no fixture filename, fixture function name or fixture payload**.
+This is enforced by `test_production_agent_code_contains_no_dataset_fixtures`, so a future change
+cannot quietly special-case the corpus.
+
+### 12.3 Repository-independent exploit generation
+
+Harness generation is derived at runtime from:
+
+1. the target language (adapter selection),
+2. the actual function source and signature,
+3. imports, callee signatures, enclosing class/module and cross-file dependencies,
+4. the diagnosed vulnerability class and CWE (strategy selection),
+5. the probed repository environment (layout, manifests, dependencies, test/database artifacts),
+6. the sandbox's execution and observability capabilities.
+
+There is no `function_name → payload` table. A SQL injection in any Python repository receives the
+SQL strategy plus the real module import; a buffer overflow in any C file receives the C shape plus
+an AddressSanitizer-compatible prototype; a new repository needs no new production code.
+
+### 12.4 Harness adapter layer
+
+`vulnguard/agents/harness/` separates vulnerability reasoning (Red Agent) from language mechanics
+(adapters).
+
+| Module | Responsibility |
+|---|---|
+| `base.py` | `HarnessAdapter` contract: language markers, program shape, target-loading instruction, prerequisite notes, validation hook, sandbox command, runtime status. `target_symbol()` resolves `function_id` or upload `id`/`name`. |
+| `python_adapter.py` | Module/owner resolution from the repo root, `from <module> import <owner>`, AST validation (redefinition, real import, marker not embedded in input, no success-on-any-exception). |
+| `c_adapter.py` / `CppAdapter` | `#include` + `int main`, target prototype instead of including the `.c` file, ASan-compatible gcc/g++ command. |
+| `javascript_adapter.py` | `require`/`import` of the workspace module, `console.log`/`stdout.write`, Node runtime note. |
+| `java_adapter.py` | `Exploit` class + `static void main`, classpath/JDK notes. |
+| `generic_adapter.py` | Honest fallback: a harness may be written, but it is never reported as validated. |
+| `environment.py` | Bounded repository probe (see §12.5). |
+| `strategies.py` | Reusable vulnerability-class guidance (see §12.6). |
+| `__init__.py` | Alias registry (`py`/`python3`, `c++`/`cc`, `node`/`ts`, …) and support matrix. |
+
+Adding a language = one adapter + one `DockerRunner.run_exploit` command. The Red Agent, Judge and
+frontend do not change, and the shared guardrails (refusal detection, required success signal,
+wrong-language rejection) are applied to every adapter automatically.
+
+### 12.5 Repository environment probe
+
+`probe_repository(repo_root, language, file_path)` walks the repository with bounded depth and file
+count (skipping `.git`, virtualenvs, `node_modules`, build output), and reports:
+
+- target module path (from the real file layout) and import roots (repo root, `src/`, package dirs),
+- build/package manifests found at the top of the tree,
+- declared dependencies (requirements files, pyproject, setup.py) and which are **not importable**,
+- test infrastructure (pytest config, `tests/`, test modules, npm/make targets),
+- database artifacts/signals (SQLite files, `DATABASE_URL`, SQLAlchemy/SQL statements),
+- sandbox runtime status for the language,
+- explicit **limitations** (missing dependency, no test suite, no build system, experimental runtime).
+
+Findings are cached per `(repo_root, language, file_path)`, injected into the harness prompt as hard
+constraints, stored on `red_report["harness_environment"]`, and appended to the failure reason when
+generation fails. The probe never fabricates availability: a dependency missing here is reported as
+missing rather than assumed present in the sandbox.
+
+### 12.6 Vulnerability-class strategies
+
+`strategies.py` holds reusable, repository-independent guidance selected by CWE first and
+vulnerability type second: `SQL_INJECTION`, `COMMAND_INJECTION`, `BUFFER_OVERFLOW`,
+`FORMAT_STRING`, `PATH_TRAVERSAL`, `TOCTOU`, `XSS`, `CODE_INJECTION`, `DESERIALIZATION`, `SSRF`,
+`XXE`, `OPEN_REDIRECT`, `LDAP_INJECTION`, and `GENERIC_DEFECT` as the fallback. Each entry describes
+prerequisites, the observable proof, and the approach — never a function name or a canned payload.
+
+### 12.7 Generic context assembly
+
+Context is assembled per function from the parser payload (imports, callees) plus imported local
+modules, callee signatures, enclosing class/`__init__`, type definitions and macros, budgeted by
+`VULNGUARD_CONTEXT_TOKEN_BUDGET` (§11.2). The environment probe complements it with repository-level
+facts the source itself cannot express (manifests, missing dependencies, test/database setup) without
+ever inlining whole files.
+
+### 12.8 Agent Live Stream — vertical layout
+
+Every function is one full-width card containing, top to bottom:
+
+1. **Function header** — name, relative path, function id, risk score, classification/CWE, overall
+   status, judge verdict, attempt counter, context counts.
+2. **ML Triage** (`section-ml-triage`) — 0–100 score, high-risk/below-threshold label, tuned
+   threshold, the extracted features that produced the score, and the high-confidence static signal
+   when one bypassed the model.
+3. **Red Agent** (`section-red`) — diagnosis, CWE, severity, location, affected lines, attack
+   strategy, generated harness, harness validation status/failure kind, errors and retry history.
+4. **Blue Agent** (`section-blue`) — patch status, original-vs-patched diff/code, justification,
+   retry information, download.
+5. **Judge Agent** (`section-judge`) — sandbox execution, exploit reproduced, exploit blocked,
+   regression tests, security validation, final verdict, error logs.
+
+Red/Blue/Judge are **never** rendered as three horizontal columns: the container is a single
+`flex-col` and each section is `w-full min-w-0`. Code/log blocks scroll inside their own bounded box,
+so the page itself never scrolls horizontally. The stream panel occupies its own full-width row in
+the dashboard (`lg:col-span-12`), and every section stacks on mobile with full-width cards.
+
+ML triage data comes from the `triage_result` WebSocket event (`score`, `threshold`, `is_high_risk`,
+`features`, `static_signal`). Features are sorted by contribution and zero-valued features are
+omitted; if the model was unavailable the section says so instead of inventing features.
+
+### 12.9 Multi-function state
+
+One `FunctionStream` per function (`scanId::functionId`, §11.7) keeps the triage features, Red/Blue/
+Judge state, verdict and event log independent. A batch of N functions creates N cards up front and
+runs three concurrently; updates are applied by pure reducers to exactly one record; completed cards
+stay visible; the stream is vertically scrollable and never auto-scrolls.
+
+### 12.10 Support status (actual, not aspirational)
+
+| Language | Harness generation | Static validation | Sandbox execution | Status |
+|---|---|---|---|---|
+| Python | yes | yes | `python3` | **verified** in this repository |
+| C | yes | yes (`int main`, target prototype) | `gcc` + ASan, target `main` renamed | **verified** in this repository |
+| C++ | yes | yes | `g++` + ASan | **verified** in this repository |
+| JavaScript/Node | yes | yes (`require`, `console.log`) | `node` | **experimental** — image runtime not verified |
+| Java | yes | yes (`class`, `main`) | `javac`/`java` | **experimental** — JDK not verified |
+| anything else | best-effort prose harness | none | none | **unsupported**, never validated |
+
+ML triage itself scores Python, C and C++ natively; other languages are routed to the agents with a
+`LANGUAGE_UNSUPPORTED` signal rather than a fabricated probability.
+
+### 12.11 Verification and remaining limits
+
+Verified by `.venv/Scripts/python.exe -m pytest -q` → **231 passed**, `npx vitest run` → **28 passed**,
+`tsc -b` / `oxlint` / `vite build` clean. Coverage is split into: adapter unit tests
+(`tests/test_harness_adapters.py`), independent repositories with unfamiliar names/layouts
+(`tests/test_generalization.py`), and the six labeled regression scenarios.
+
+The LLM was stubbed in these tests and Docker execution was not run, so end-to-end exploitation
+quality against a live provider and a real container remains unverified. JavaScript/Java execution
+depends on the sandbox image. Version control, cross-file dependency installation and repository
+build/test configuration are probed and reported, not universally guaranteed.

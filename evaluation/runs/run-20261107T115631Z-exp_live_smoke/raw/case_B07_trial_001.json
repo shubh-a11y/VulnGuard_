@@ -1,0 +1,53 @@
+{
+  "run_id": "run-20261107T115631Z-exp_live_smoke",
+  "case_id": "B07",
+  "ground_truth": "vulnerable",
+  "cwe": "CWE-78",
+  "language": "python",
+  "source_path": "evaluation/dataset/vulnerable/command/cmdi_01.py",
+  "target_function": "ping_host",
+  "triage": {
+    "enabled": true,
+    "selected": true,
+    "risk_score": 76.1,
+    "bypass_reason": "STATIC_SIGNAL:SHELL_EXECUTION"
+  },
+  "vulnerability_found": true,
+  "reported_cwe": "CWE-78",
+  "reported_type": "COMMAND_INJECTION",
+  "cwe_match": true,
+  "localization_correct": true,
+  "exploit_status": "UNAVAILABLE",
+  "patch_generated": false,
+  "patched_code": null,
+  "patch_applied": false,
+  "patch_apply_error": null,
+  "patch_syntax_valid": false,
+  "attempts_used": 1,
+  "judge_verdict": "MAX_RETRIES_EXHAUSTED",
+  "pipeline_status": "FAILED",
+  "strict_repair_success": false,
+  "failure_category": "BLUE_GENERATION_FAILURE",
+  "original_security_test": {
+    "passed": true,
+    "vulnerability_demonstrated": true,
+    "evidence": "Canary file created: True",
+    "error": null
+  },
+  "original_regression_test": {
+    "passed": true,
+    "vulnerability_demonstrated": false,
+    "evidence": "ping returncode: 0",
+    "error": null
+  },
+  "patched_security_test": {},
+  "patched_regression_test": {},
+  "elapsed_seconds": 181.148,
+  "usage": {
+    "calls": 10,
+    "input_tokens": 11000,
+    "output_tokens": 16931,
+    "total_tokens": 27931,
+    "cost_usd": 0.0
+  }
+}

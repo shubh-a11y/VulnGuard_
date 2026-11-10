@@ -1,0 +1,66 @@
+{
+  "run_id": "run-20261107T120552Z-exp_full_pipeline",
+  "case_id": "B13",
+  "ground_truth": "vulnerable",
+  "cwe": "CWE-22",
+  "language": "python",
+  "source_path": "evaluation/dataset/vulnerable/path/path_01.py",
+  "target_function": "read_user_file",
+  "triage": {
+    "enabled": true,
+    "selected": true,
+    "risk_score": 42.5,
+    "bypass_reason": null
+  },
+  "vulnerability_found": true,
+  "reported_cwe": "CWE-22",
+  "reported_type": "PATH_TRAVERSAL",
+  "cwe_match": true,
+  "localization_correct": true,
+  "exploit_status": "AVAILABLE",
+  "patch_generated": true,
+  "patched_code": "def read_user_file(base_dir: str, filename: str) -> str:\n    # Path traversal vulnerability via simple concatenation\n    if \"..\" in filename or \"/\" in filename or \"\\\\\" in filename:\n        raise ValueError(\"Invalid filename\")\n    file_path = base_dir + \"/\" + filename\n    with open(file_path, \"r\", encoding=\"utf-8\") as f:\n        return f.read()\n",
+  "patch_applied": true,
+  "patch_apply_error": null,
+  "patch_syntax_valid": [
+    true,
+    ""
+  ],
+  "attempts_used": 1,
+  "judge_verdict": "PASS",
+  "pipeline_status": "COMPLETE",
+  "strict_repair_success": false,
+  "failure_category": "REGRESSION_FAILURE",
+  "original_security_test": {
+    "passed": true,
+    "vulnerability_demonstrated": true,
+    "evidence": "Read secret: CANARY_SECRET_DATA_TRAVERSAL_CONFIRMED",
+    "error": null
+  },
+  "original_regression_test": {
+    "passed": true,
+    "vulnerability_demonstrated": false,
+    "evidence": "Read VALID_FILE_CONTENT",
+    "error": null
+  },
+  "patched_security_test": {
+    "passed": false,
+    "vulnerability_demonstrated": false,
+    "evidence": "Invalid filename",
+    "error": "Invalid filename"
+  },
+  "patched_regression_test": {
+    "passed": false,
+    "vulnerability_demonstrated": false,
+    "evidence": "'str' object is not callable",
+    "error": "'str' object is not callable"
+  },
+  "elapsed_seconds": 59.086,
+  "usage": {
+    "calls": 3,
+    "input_tokens": 3493,
+    "output_tokens": 5327,
+    "total_tokens": 8820,
+    "cost_usd": 0.0
+  }
+}

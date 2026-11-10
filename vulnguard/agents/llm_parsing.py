@@ -83,6 +83,11 @@ def parse_agent_json(
     inner = strip_code_fences(stripped)
     if inner and inner != stripped:
         candidates.append(inner)
+    # A model may wrap the JSON object in prose; recover the object itself
+    # (never arbitrary code) before giving up on the response.
+    embedded = _first_json_object(stripped)
+    if embedded and embedded not in candidates:
+        candidates.append(embedded)
 
     errors: list[str] = []
     for payload in candidates:
@@ -98,6 +103,39 @@ def parse_agent_json(
             errors.append(f"dict coercion: {exc}")
 
     return None, "; ".join(errors)
+
+
+def _first_json_object(text: str) -> str:
+    """Return the first balanced ``{...}`` object in ``text``, or "".
+
+    Only a syntactically balanced object is returned, so a truncated response
+    still fails to parse instead of being silently repaired into a wrong value.
+    """
+    start = text.find("{")
+    while start != -1:
+        depth = 0
+        in_string = False
+        escaped = False
+        for index in range(start, len(text)):
+            char = text[index]
+            if in_string:
+                if escaped:
+                    escaped = False
+                elif char == "\\":
+                    escaped = True
+                elif char == '"':
+                    in_string = False
+                continue
+            if char == '"':
+                in_string = True
+            elif char == "{":
+                depth += 1
+            elif char == "}":
+                depth -= 1
+                if depth == 0:
+                    return text[start : index + 1].strip()
+        start = text.find("{", start + 1)
+    return ""
 
 
 def finish_reason(response: Any) -> str:

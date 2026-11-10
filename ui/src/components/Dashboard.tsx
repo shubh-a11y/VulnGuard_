@@ -1,11 +1,44 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Shield, Upload, Activity, Code, TerminalSquare, AlertCircle, Play, Square, BarChart3, RefreshCw } from 'lucide-react';
+import {
+  Shield,
+  Upload,
+  Activity,
+  Code,
+  TerminalSquare,
+  AlertCircle,
+  Play,
+  Square,
+  BarChart3,
+  RefreshCw,
+  Trash2,
+  History,
+} from 'lucide-react';
 import { cn } from '../lib/utils';
 import AgentFeed from './AgentFeed';
+import {
+  clearStoredOutputs,
+  deleteStoredOutput,
+  loadStoredOutputs,
+  saveStoredOutput,
+  type StoredScanOutput,
+} from '../lib/scanOutputStore';
+import {
+  applyEventToStreams,
+  createStream,
+  streamFromStoredOutput,
+  streamKey,
+  upsertStream,
+  type FunctionStream,
+} from '../lib/functionStreams';
 import { MetricCard, ModelHealthCard } from './dashboard/MetricCards';
 
 const API = 'http://localhost:8000';
+const WS = 'ws://localhost:8000/ws/scan';
+
+// Functions in a batch scan run with a small amount of concurrency; each one
+// keeps its own socket and its own card in the live stream.
+const BATCH_CONCURRENCY = 3;
 
 interface Metrics {
   total_scans: number;
@@ -27,22 +60,18 @@ interface EvaluationHealth {
   figures_dir: string;
 }
 
-interface SuccessfulFix {
-  scan_id: string;
-  function_id: string;
-  file_path: string;
-  judge_verdict: string;
-  vulnerability_type: string | null;
-  severity: string | null;
-  risk_score: number | null;
-  updated_at: string;
-}
+const newScanId = () => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+};
 
 export default function Dashboard() {
   const [file, setFile] = useState<File | null>(null);
   const [functions, setFunctions] = useState<any[]>([]);
-  const [selectedFunc, setSelectedFunc] = useState<any | null>(null);
-  const [events, setEvents] = useState<any[]>([]);
+  const [selectedFuncId, setSelectedFuncId] = useState<string | null>(null);
+  const [streams, setStreams] = useState<FunctionStream[]>([]);
   const [isScanning, setIsScanning] = useState(false);
   const [uploadError, setUploadError] = useState('');
   const [metrics, setMetrics] = useState<Metrics>({ total_scans: 0, vulnerabilities_found: 0, patches_validated: 0 });
@@ -51,24 +80,22 @@ export default function Dashboard() {
   const [verdicts, setVerdicts] = useState<Record<string, number>>({});
   const [modelHealth, setModelHealth] = useState<ModelHealth>({ recall: 0, precision: 0, patch_success_rate: 0 });
   const [evaluation, setEvaluation] = useState<EvaluationHealth | null>(null);
-  const [fixes, setFixes] = useState<SuccessfulFix[]>([]);
-  const [dataError, setDataError] = useState('');
+  const [storedOutputs, setStoredOutputs] = useState<StoredScanOutput[]>([]);
   const [runningEvaluation, setRunningEvaluation] = useState(false);
   const [evaluationError, setEvaluationError] = useState('');
-  const wsRef = useRef<WebSocket | null>(null);
+  const wsRegistry = useRef<Map<string, WebSocket>>(new Map());
+  const sessionRef = useRef('');
   const cancelledRef = useRef(false);
 
   const loadDashboardData = async () => {
-    setDataError('');
     const requests = [
       fetch(`${API}/api/metrics`),
       fetch(`${API}/api/scan/status`),
       fetch(`${API}/api/scan/verdict-distribution`),
-      fetch(`${API}/api/scan/successful-fixes?limit=6`),
       fetch(`${API}/api/evaluation/model-health`),
       fetch(`${API}/api/evaluation/health`),
     ];
-    const [metricsRes, scansRes, verdictRes, fixesRes, healthRes, evaluationRes] = await Promise.allSettled(requests);
+    const [metricsRes, scansRes, verdictRes, healthRes, evaluationRes] = await Promise.allSettled(requests);
     try {
       if (metricsRes.status === 'fulfilled' && metricsRes.value.ok) setMetrics(await metricsRes.value.json());
       if (scansRes.status === 'fulfilled' && scansRes.value.ok) {
@@ -76,13 +103,6 @@ export default function Dashboard() {
         setHistory(Object.values(data.scans).slice(0, 5));
       }
       if (verdictRes.status === 'fulfilled' && verdictRes.value.ok) setVerdicts(await verdictRes.value.json());
-      if (fixesRes.status === 'fulfilled' && fixesRes.value.ok) {
-        setFixes(await fixesRes.value.json());
-      } else {
-        // Surface the failure instead of letting an empty table look like
-        // "no validated fixes exist".
-        setDataError('Could not load validated fixes from the backend.');
-      }
       if (healthRes.status === 'fulfilled' && healthRes.value.ok) setModelHealth(await healthRes.value.json());
       if (evaluationRes.status === 'fulfilled' && evaluationRes.value.ok) setEvaluation(await evaluationRes.value.json());
     } catch {
@@ -92,6 +112,14 @@ export default function Dashboard() {
 
   useEffect(() => {
     loadDashboardData();
+    const stored = loadStoredOutputs();
+    setStoredOutputs(stored);
+    if (stored.length > 0) {
+      // Keep the most recent output visible after a reload instead of an empty feed.
+      const restored = streamFromStoredOutput(stored[0]);
+      setStreams([restored]);
+      setSelectedFuncId(restored.functionId);
+    }
   }, []);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -99,8 +127,20 @@ export default function Dashboard() {
     const uploadedFile = e.target.files[0];
     setFile(uploadedFile);
     setFunctions([]);
-    setSelectedFunc(null);
+    setSelectedFuncId(null);
     setUploadError('');
+
+    // A new target means a new live session; finished output stays in storage.
+    wsRegistry.current.forEach((ws) => {
+      try {
+        ws.close();
+      } catch {
+        // The socket is already gone; nothing to clean up.
+      }
+    });
+    wsRegistry.current.clear();
+    sessionRef.current = '';
+    setStreams([]);
 
     const formData = new FormData();
     formData.append('file', uploadedFile);
@@ -118,58 +158,120 @@ export default function Dashboard() {
     }
   };
 
-  const runScan = (func: any, clearEvents: boolean) => new Promise<void>((resolve) => {
-    setSelectedFunc(func);
-    if (clearEvents) setEvents([]);
-    setEvents((previous) => [
-      ...previous,
-      { type: 'batch_function', function_name: func.name, relative_path: func.relative_path },
-    ]);
+  const runScan = (func: any, scanId: string) =>
+    new Promise<void>((resolve) => {
+      const functionId = func.id ?? func.name;
+      const key = streamKey(scanId, functionId);
+      const startedAt = new Date().toISOString();
+      const collected: any[] = [];
 
-    if (wsRef.current) wsRef.current.close();
-    const ws = new WebSocket('ws://localhost:8000/ws/scan');
-    wsRef.current = ws;
-    let finished = false;
-    const finish = () => {
-      if (finished) return;
-      finished = true;
-      resolve();
-    };
+      // Reuse the card if this function already has one in this scan, so the
+      // list order never changes mid-batch.
+      setStreams((prev) => {
+        if (prev.some((stream) => stream.key === key)) {
+          return prev.map((stream) =>
+            stream.key === key ? { ...stream, status: 'RUNNING', updatedAt: startedAt } : stream,
+          );
+        }
+        return upsertStream(
+          prev,
+          createStream({
+            scanId,
+            functionId,
+            functionName: func.name,
+            relativePath: func.relative_path ?? '',
+            startedAt,
+          }),
+        );
+      });
 
-    ws.onopen = () => {
-      ws.send(JSON.stringify(func));
-    };
+      const append = (event: any) => {
+        collected.push(event);
+        setStreams((prev) => applyEventToStreams(prev, key, event));
+      };
 
-    ws.onmessage = (event) => {
-      let data: any;
-      try {
-        data = JSON.parse(event.data);
-      } catch {
-        data = {
-          type: 'error',
-          stage: 'stream',
-          message: 'Received a malformed event from the backend.',
+      append({
+        type: 'status',
+        stage: 'startup',
+        function_id: functionId,
+        message: `Starting scan for ${func.name}...`,
+      });
+
+      const ws = new WebSocket(WS);
+      wsRegistry.current.set(key, ws);
+      let finished = false;
+      let terminalSeen = false;
+
+      const finish = () => {
+        if (finished) return;
+        finished = true;
+        wsRegistry.current.delete(key);
+        const terminal = [...collected]
+          .reverse()
+          .find((event) => event.type === 'complete' || event.type === 'error');
+        const output: StoredScanOutput = {
+          id: key,
+          functionId,
+          functionName: func.name,
+          relativePath: func.relative_path ?? '',
+          startedAt,
+          finishedAt: new Date().toISOString(),
+          pipelineStatus:
+            terminal?.pipeline_status ?? (terminal?.type === 'error' ? 'ERROR' : 'INCOMPLETE'),
+          judgeVerdict: terminal?.judge_verdict,
+          events: collected,
         };
-      }
-      setEvents((prev) => [...prev, { ...data, function_name: func.name }]);
-      if (data.type === 'complete' || data.type === 'error') {
-        ws.close();
-        finish();
-      }
-    };
+        if (collected.length > 0) setStoredOutputs(saveStoredOutput(output));
+        resolve();
+      };
 
-    ws.onerror = () => {
-      setEvents((prev) => [...prev, { type: 'error', message: 'WebSocket connection failed', function_name: func.name }]);
-      finish();
-    };
-    ws.onclose = finish;
-  });
+      ws.onopen = () => {
+        ws.send(JSON.stringify(func));
+      };
+
+      ws.onmessage = (event) => {
+        let data: any;
+        try {
+          data = JSON.parse(event.data);
+        } catch {
+          data = {
+            type: 'error',
+            stage: 'stream',
+            function_id: functionId,
+            message: 'Received a malformed event from the backend.',
+          };
+        }
+        append(data);
+        if (data.type === 'complete' || data.type === 'error') {
+          terminalSeen = true;
+          ws.close();
+          finish();
+        }
+      };
+
+      ws.onerror = () => {
+        // Pipeline failures already arrive as an `error` event; a close after
+        // that is expected, so don't append a second, misleading connection error.
+        if (!terminalSeen) {
+          append({
+            type: 'error',
+            stage: 'stream',
+            function_id: functionId,
+            message: 'WebSocket connection failed',
+          });
+        }
+        finish();
+      };
+      ws.onclose = finish;
+    });
 
   const startScan = async (func: any) => {
     cancelledRef.current = false;
+    if (!sessionRef.current) sessionRef.current = newScanId();
+    setSelectedFuncId(func.id ?? func.name);
     setIsScanning(true);
     setBatchProgress({ current: 1, total: 1 });
-    await runScan(func, true);
+    await runScan(func, sessionRef.current);
     setIsScanning(false);
     setBatchProgress({ current: 0, total: 0 });
     loadDashboardData();
@@ -177,13 +279,37 @@ export default function Dashboard() {
 
   const startBatchScan = async () => {
     cancelledRef.current = false;
+    const scanId = newScanId();
+    sessionRef.current = scanId;
     setIsScanning(true);
-    setEvents([]);
-    for (let index = 0; index < functions.length; index += 1) {
-      if (cancelledRef.current) break;
-      setBatchProgress({ current: index + 1, total: functions.length });
-      await runScan(functions[index], false);
-    }
+    // Every discovered function gets its card before any agent starts, so all
+    // queued work is visible at once.
+    setStreams(
+      functions.map((func) =>
+        createStream({
+          scanId,
+          functionId: func.id ?? func.name,
+          functionName: func.name,
+          relativePath: func.relative_path ?? '',
+        }),
+      ),
+    );
+    setBatchProgress({ current: 0, total: functions.length });
+
+    const queue = [...functions];
+    let completed = 0;
+    const worker = async () => {
+      while (!cancelledRef.current && queue.length > 0) {
+        const func = queue.shift();
+        if (!func) break;
+        await runScan(func, scanId);
+        completed += 1;
+        setBatchProgress({ current: completed, total: functions.length });
+      }
+    };
+    const workerCount = Math.max(1, Math.min(BATCH_CONCURRENCY, functions.length));
+    await Promise.all(Array.from({ length: workerCount }, () => worker()));
+
     setIsScanning(false);
     setBatchProgress({ current: 0, total: 0 });
     loadDashboardData();
@@ -191,9 +317,58 @@ export default function Dashboard() {
 
   const cancelScan = () => {
     cancelledRef.current = true;
-    wsRef.current?.close();
+    wsRegistry.current.forEach((ws) => {
+      try {
+        ws.close();
+      } catch {
+        // Already closed.
+      }
+    });
+    wsRegistry.current.clear();
+    const now = new Date().toISOString();
+    setStreams((prev) =>
+      prev.map((stream) =>
+        stream.terminal
+          ? stream
+          : {
+              ...stream,
+              terminal: true,
+              pipelineStatus: 'CANCELLED',
+              status: 'INCONCLUSIVE' as const,
+              updatedAt: now,
+            },
+      ),
+    );
     setIsScanning(false);
     setBatchProgress({ current: 0, total: 0 });
+  };
+
+  const clearStreams = () => {
+    wsRegistry.current.forEach((ws) => {
+      try {
+        ws.close();
+      } catch {
+        // Already closed.
+      }
+    });
+    wsRegistry.current.clear();
+    setStreams([]);
+    setSelectedFuncId(null);
+  };
+
+  const openStoredOutput = (run: StoredScanOutput) => {
+    const restored = streamFromStoredOutput(run);
+    setStreams((prev) => upsertStream(prev, restored));
+    setSelectedFuncId(restored.functionId);
+  };
+
+  const removeStoredOutput = (id: string) => {
+    setStoredOutputs(deleteStoredOutput(id));
+  };
+
+  const removeAllStoredOutputs = () => {
+    clearStoredOutputs();
+    setStoredOutputs([]);
   };
 
   const runEvaluation = async () => {
@@ -221,10 +396,10 @@ export default function Dashboard() {
       {/* Background Noise & Gradients */}
       <div className="fixed inset-0 z-0 pointer-events-none opacity-[0.03] bg-[url('https://grainy-gradients.vercel.app/noise.svg')]"></div>
       <div className="fixed top-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full bg-blue-900/20 blur-[120px] pointer-events-none z-0"></div>
-      
+
       <div className="relative z-10 max-w-7xl mx-auto">
         <header className="mb-8 flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             className="flex items-center gap-4"
@@ -254,7 +429,7 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Left Column: Upload & Code */}
           <div className="lg:col-span-4 flex flex-col gap-6">
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               className="glassmorphism rounded-3xl p-6"
@@ -262,7 +437,7 @@ export default function Dashboard() {
               <h2 className="text-lg font-medium text-white mb-4 flex items-center gap-2">
                 <Upload className="w-5 h-5 text-white/50" /> Upload Target
               </h2>
-              
+
               <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-white/20 rounded-2xl cursor-pointer hover:bg-white/5 hover:border-white/40 transition-all">
                 <div className="flex flex-col items-center justify-center pt-5 pb-6">
                   <Upload className="w-8 h-8 mb-3 text-white/40" />
@@ -300,8 +475,8 @@ export default function Dashboard() {
                         onClick={() => startScan(f)}
                         className={cn(
                           "w-full text-left p-3 rounded-lg border transition-all text-sm flex items-center justify-between group disabled:cursor-not-allowed disabled:opacity-50",
-                          selectedFunc?.id === f.id 
-                            ? "bg-white/10 border-white/30 text-white" 
+                          selectedFuncId === (f.id ?? f.name)
+                            ? "bg-white/10 border-white/30 text-white"
                             : "bg-white/5 border-white/10 text-white/60 hover:bg-white/10 hover:text-white"
                         )}
                       >
@@ -332,34 +507,102 @@ export default function Dashboard() {
                   </div>
                 </div>
               )}
+
+              {storedOutputs.length > 0 && (
+                <div className="mt-6 border-t border-white/10 pt-4">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <h3 className="flex items-center gap-1.5 text-xs font-medium text-white/40">
+                      <History className="h-3.5 w-3.5" /> Stored output ({storedOutputs.length})
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={removeAllStoredOutputs}
+                      disabled={isScanning}
+                      className="text-xs text-red-300/80 hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      Delete all
+                    </button>
+                  </div>
+                  <div className="max-h-56 space-y-2 overflow-y-auto pr-1">
+                    {storedOutputs.map((run) => (
+                      <div
+                        key={run.id}
+                        className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 p-2 text-xs"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => openStoredOutput(run)}
+                          disabled={isScanning}
+                          title="Open stored output"
+                          className="min-w-0 flex-1 text-left hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          <span className="block truncate text-white/70">{run.functionName}</span>
+                          <span className="block truncate text-white/35">
+                            {run.judgeVerdict || run.pipelineStatus || 'stored'} ·{' '}
+                            {new Date(run.finishedAt || run.startedAt).toLocaleString()}
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => removeStoredOutput(run.id)}
+                          disabled={isScanning}
+                          title="Delete stored output"
+                          aria-label="Delete stored output"
+                          className="shrink-0 p-1 text-white/40 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </motion.div>
           </div>
 
-          {/* Right Column: Agent Feed */}
-          <div className="lg:col-span-8 flex flex-col gap-6">
-            <motion.div 
+          {/* Agent Live Stream — its own full-width row so every function card
+              and every vertical section gets the whole page width. */}
+          <div className="lg:col-span-12 flex min-w-0 flex-col gap-6">
+            <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               className="glassmorphism rounded-3xl p-0 overflow-hidden flex flex-col h-[700px]"
             >
-              <div className="p-4 border-b border-white/10 bg-white/5 flex items-center gap-3">
+              <div className="p-4 border-b border-white/10 bg-white/5 flex flex-wrap items-center gap-3">
                 <TerminalSquare className="w-5 h-5 text-white/50" />
                 <h2 className="text-sm font-medium text-white/80">Live Agent Stream</h2>
-                {isScanning && (
-                  <div className="ml-auto flex items-center gap-3 text-xs text-white/50">
+                <span className="text-xs text-white/35">
+                  {streams.length} function{streams.length === 1 ? '' : 's'}
+                </span>
+                <div className="ml-auto flex items-center gap-3 text-xs text-white/50">
+                  {isScanning && (
                     <span className="flex items-center gap-2">
                       <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                      {batchProgress.total > 1 ? `${batchProgress.current}/${batchProgress.total}` : 'Running'}
+                      {batchProgress.total > 1
+                        ? `${batchProgress.current}/${batchProgress.total}`
+                        : 'Running'}
                     </span>
+                  )}
+                  {streams.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={clearStreams}
+                      className="flex items-center gap-1 hover:text-white"
+                      title="Clear the live stream"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" /> Clear
+                    </button>
+                  )}
+                  {isScanning && (
                     <button type="button" onClick={cancelScan} title="Cancel scan" aria-label="Cancel scan" className="p-1 hover:text-white">
                       <Square className="h-3.5 w-3.5" />
                     </button>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
-              
-              <div className="flex-1 p-6 overflow-y-auto">
-                <AgentFeed events={events} selectedFunc={selectedFunc} />
+
+              <div className="flex-1 overflow-hidden">
+                <AgentFeed streams={streams} />
               </div>
             </motion.div>
           </div>
@@ -393,7 +636,7 @@ export default function Dashboard() {
             <ModelHealthCard title="Patch success rate" value={modelHealth.patch_success_rate} color="amber" />
           </div>
 
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <div className="grid grid-cols-1 gap-6">
             <div className="glassmorphism rounded-3xl p-6">
               <h3 className="mb-4 text-sm font-medium text-white/70">Judge verdicts</h3>
               {verdictEntries.length === 0 ? (
@@ -414,32 +657,6 @@ export default function Dashboard() {
                     >
                       {verdict}: {count}
                     </span>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="glassmorphism rounded-3xl p-6">
-              <div className="mb-4 flex items-center justify-between gap-3">
-                <h3 className="text-sm font-medium text-white/70">Recent validated fixes</h3>
-                <span className="text-xs text-white/35">{fixes.length} shown</span>
-              </div>
-              {dataError && <p className="mb-3 text-xs text-red-300">{dataError}</p>}
-              {fixes.length === 0 ? (
-                <p className="text-sm text-white/35">No validated patches yet.</p>
-              ) : (
-                <div className="space-y-3">
-                  {fixes.map((fix) => (
-                    <div key={fix.scan_id} className="flex items-start justify-between gap-3 text-xs">
-                      <div className="min-w-0">
-                        <div className="truncate text-white/70">{fix.function_id}</div>
-                        <div className="truncate text-white/35">{fix.file_path}</div>
-                      </div>
-                      <div className="shrink-0 text-right font-mono text-white/40">
-                        <div>{fix.vulnerability_type || '—'}</div>
-                        <div>{fix.severity || '—'}</div>
-                      </div>
-                    </div>
                   ))}
                 </div>
               )}

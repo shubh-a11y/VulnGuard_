@@ -1,0 +1,39 @@
+{
+  "run_id": "run-20261107T120552Z-exp_full_pipeline",
+  "case_id": "B27",
+  "ground_truth": "vulnerable",
+  "cwe": "CWE-134",
+  "language": "c",
+  "source_path": "evaluation/dataset/vulnerable/format/fmt_03.c",
+  "target_function": "format_status",
+  "triage": {
+    "enabled": true,
+    "selected": false,
+    "risk_score": 21.9,
+    "bypass_reason": null
+  },
+  "vulnerability_found": false,
+  "pipeline_status": "TRIAGE_FILTERED",
+  "failure_category": "TRIAGE_FILTERED",
+  "strict_repair_success": false,
+  "original_security_test": {
+    "passed": true,
+    "vulnerability_demonstrated": true,
+    "evidence": "output=4012e0.fffffffe.0.60ff28, literal_found=False, hex_leak=True",
+    "error": null
+  },
+  "original_regression_test": {
+    "passed": true,
+    "vulnerability_demonstrated": false,
+    "evidence": "output=HelloNormalLog",
+    "error": null
+  },
+  "elapsed_seconds": 0.0,
+  "usage": {
+    "calls": 0,
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "total_tokens": 0,
+    "cost_usd": 0.0
+  }
+}

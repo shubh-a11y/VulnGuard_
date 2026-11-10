@@ -1,0 +1,40 @@
+{
+  "timestamp_utc": "2026-11-07T12:05:52Z",
+  "os": {
+    "system": "Windows",
+    "release": "11",
+    "version": "10.0.26200",
+    "machine": "AMD64",
+    "processor": "Intel64 Family 6 Model 186 Stepping 2, GenuineIntel"
+  },
+  "python": {
+    "version": "3.12.6 (tags/v3.12.6:a4a2d2b, Sep  6 2024, 20:11:23) [MSC v.1940 64 bit (AMD64)]",
+    "executable": "C:\\Users\\singh\\OneDrive\\Desktop\\AI Projects\\VulnGuard\\.venv\\Scripts\\python.exe"
+  },
+  "git": {
+    "commit_sha": "90d73c386d4665297789f7efbd73948a60e6192a",
+    "branch": "publish-clean",
+    "is_dirty": true
+  },
+  "docker": {
+    "docker_available": true,
+    "docker_version": "Docker version 29.1.3, build f52814d",
+    "docker_daemon_active": true
+  },
+  "packages": {
+    "xgboost": "3.3.0",
+    "scikit-learn": "not installed",
+    "numpy": "2.5.4",
+    "pandas": "3.1.0",
+    "matplotlib": "3.11.2",
+    "tree-sitter": "0.26.0",
+    "langgraph": "unknown",
+    "langchain": "not installed",
+    "pytest": "9.1.1",
+    "joblib": "1.6.0"
+  },
+  "dataset": {
+    "version": "1.0.0",
+    "manifest_sha256": "c31a4bafc9f5401de08b08ff57f79ebc2f5b65a3366b2b77c1d64edb49db18bb"
+  }
+}

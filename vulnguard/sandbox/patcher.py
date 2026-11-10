@@ -5,7 +5,9 @@ AST Span Patcher — reliably replaces function code via exact byte offsets.
 from __future__ import annotations
 
 import logging
+import time
 from pathlib import Path
+from typing import Any, Callable
 
 logger = logging.getLogger(__name__)
 
@@ -28,13 +30,7 @@ def apply_patch(
     *,
     backup_dir: Path | None = None,
 ) -> tuple[Path, Path | None]:
-    """Apply a patch using a backup/restore path.
-
-    The original file bytes are backed up before any write, so a failed/invalid
-    patch can be rolled back. The backup name is timestamped to avoid collisions.
-    """
-    """
-    Replaces the exact byte span in a file with the new patched code.
+    """Replaces the exact byte span in a file with the new patched code.
     This avoids the flakiness of LLM-generated git-diffs.
 
     The original file bytes are copied to a timestamped backup next to the target
@@ -110,17 +106,10 @@ def apply_patch_with_validation(
     end_byte: int,
     new_code: str,
     *,
-    validate: callable,
+    validate: Callable[[str], tuple[bool, str]],
     backup_dir: Path | None = None,
 ) -> dict[str, Any]:
     """Apply a patch, run a validator, and restore the backup on failure.
-
-    This is the public writeback primitive used after the Judge agent passes.
-    The validator receives the patched file path and must return (ok, reason).
-    If it fails, the pre-write backup is restored automatically.
-    """
-    """
-    Apply a patch, run a validator, and restore the backup on failure.
 
     This is the public writeback primitive used after the Judge agent passes.
     The validator receives the patched file path and must return (ok, reason).
