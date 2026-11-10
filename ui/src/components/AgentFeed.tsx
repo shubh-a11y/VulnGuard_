@@ -81,6 +81,26 @@ function CodeBlock({
   );
 }
 
+type SectionStage = 'waiting' | 'running' | 'complete';
+
+const STAGE_BADGES: Record<SectionStage, { label: string; className: string }> = {
+  waiting: { label: 'waiting', className: 'border-white/10 bg-white/5 text-white/35' },
+  running: { label: 'running', className: 'border-sky-500/30 bg-sky-500/10 text-sky-300' },
+  complete: { label: 'complete', className: 'border-green-500/25 bg-green-500/10 text-green-300' },
+};
+
+function StageBadge({ stage }: { stage: SectionStage }) {
+  const badge = STAGE_BADGES[stage];
+  return (
+    <span
+      data-testid={`stage-${stage}`}
+      className={cn('rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wider', badge.className)}
+    >
+      {badge.label}
+    </span>
+  );
+}
+
 function SectionShell({
   title,
   icon,
@@ -88,6 +108,7 @@ function SectionShell({
   children,
   actions,
   testId,
+  stage,
 }: {
   title: string;
   icon: React.ReactNode;
@@ -95,18 +116,28 @@ function SectionShell({
   children: React.ReactNode;
   actions?: React.ReactNode;
   testId?: string;
+  stage?: SectionStage;
 }) {
   return (
     <section data-testid={testId} className={cn('w-full min-w-0 rounded-2xl border p-4', accent)}>
-      <div className="mb-3 flex items-center gap-2">
+      <div className="mb-3 flex flex-wrap items-center gap-2">
         {icon}
         <h4 className="text-xs font-semibold uppercase tracking-wider text-white/70">{title}</h4>
+        {stage && <StageBadge stage={stage} />}
         {actions && <div className="ml-auto">{actions}</div>}
       </div>
       {children}
     </section>
   );
 }
+
+/** Progress of one agent section, derived only from events already received. */
+const stageOf = (record: Record<string, any> | null): SectionStage => {
+  if (!record) return 'waiting';
+  if (record.completed) return 'complete';
+  if (record.started) return 'running';
+  return 'waiting';
+};
 
 function Placeholder({ text }: { text: string }) {
   return <p className="text-xs text-white/35">{text}</p>;
@@ -239,10 +270,13 @@ function DiagnosisDetails({ state }: { state: Record<string, any> }) {
 
 function RedSection({ stream }: { stream: FunctionStream }) {
   const state = stream.red ?? {};
+  const stage = stageOf(stream.red);
 
   let body: React.ReactNode;
   if (!stream.red) {
     body = <Placeholder text="Awaiting vulnerability analysis." />;
+  } else if (state.started && !state.completed && state.vulnerability_found === undefined) {
+    body = <Placeholder text="Red Agent is analyzing this function…" />;
   } else if (state.pipeline_status === 'RED_ERROR' || state.red_report?.parse_error) {
     body = (
       <div className="rounded-xl border border-red-500/30 bg-red-950/20 p-3">
@@ -334,6 +368,7 @@ function RedSection({ stream }: { stream: FunctionStream }) {
       icon={<ShieldAlert className="h-4 w-4 text-red-300" />}
       accent="border-red-500/15 bg-red-950/10"
       testId="section-red"
+      stage={stage}
     >
       {body}
     </SectionShell>
@@ -342,6 +377,7 @@ function RedSection({ stream }: { stream: FunctionStream }) {
 
 function BlueSection({ stream }: { stream: FunctionStream }) {
   const state = stream.blue ?? {};
+  const stage = stageOf(stream.blue);
 
   const downloadPatch = () => {
     const content = state.patch_diff || state.patched_code;
@@ -357,6 +393,8 @@ function BlueSection({ stream }: { stream: FunctionStream }) {
   let body: React.ReactNode;
   if (!stream.blue) {
     body = <Placeholder text="Awaiting patch generation." />;
+  } else if (state.started && !state.completed && !state.patched_code) {
+    body = <Placeholder text="Blue Agent is generating the patch…" />;
   } else if (state.pipeline_status === 'BLUE_ERROR' && !state.patched_code) {
     body = (
       <div className="rounded-xl border border-red-500/30 bg-red-950/20 p-3">
@@ -400,6 +438,7 @@ function BlueSection({ stream }: { stream: FunctionStream }) {
       icon={<Wrench className="h-4 w-4 text-blue-300" />}
       accent="border-blue-500/15 bg-blue-950/10"
       testId="section-blue"
+      stage={stage}
       actions={
         state.patched_code ? (
           <button
@@ -419,8 +458,40 @@ function BlueSection({ stream }: { stream: FunctionStream }) {
   );
 }
 
+function ExecutionResult({
+  label,
+  result,
+  testId,
+}: {
+  label: string;
+  result?: { ran?: boolean; reproduced?: boolean; success?: boolean; logs?: string };
+  testId: string;
+}) {
+  if (!result) return null;
+  const outcome =
+    result.ran === false
+      ? 'did not run'
+      : result.reproduced
+        ? 'defect reproduced'
+        : result.success === false
+          ? 'execution failed'
+          : 'defect not reproduced';
+  return (
+    <div data-testid={testId} className="mb-2 rounded-lg border border-white/10 bg-black/30 p-2">
+      <div className="mb-1 flex flex-wrap items-center gap-2 text-[11px]">
+        <span className="font-medium text-white/60">{label}</span>
+        <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-white/50">
+          {outcome}
+        </span>
+      </div>
+      <CodeBlock value={result.logs} tone="text-white/60" maxHeight="max-h-40" />
+    </div>
+  );
+}
+
 function JudgeSection({ stream }: { stream: FunctionStream }) {
   const state = stream.judge ?? {};
+  const stage = stageOf(stream.judge);
   const isRetry = state.pipeline_status === 'RETRY';
   const attempt = (state.attempt_number ?? 0) + 1;
   const maxAttempts = state.max_attempts ?? stream.maxAttempts ?? 3;
@@ -428,6 +499,8 @@ function JudgeSection({ stream }: { stream: FunctionStream }) {
   let body: React.ReactNode;
   if (!stream.judge) {
     body = <Placeholder text="Awaiting patch validation." />;
+  } else if (state.started && !state.judge_verdict && !state.original && !state.patched) {
+    body = <Placeholder text="Judge Agent is validating the patch in the sandbox…" />;
   } else {
     body = (
       <div
@@ -443,13 +516,17 @@ function JudgeSection({ stream }: { stream: FunctionStream }) {
           </span>
         </div>
         <p className="mb-3 text-xs text-white/80">
-          Verdict: <span className="font-bold text-white">{state.judge_verdict || '—'}</span>
+          Verdict:{' '}
+          <span className="font-bold text-white">{state.judge_verdict || 'pending'}</span>
           {isRetry && (
             <span className="font-normal text-white/50"> — retry {attempt}/{maxAttempts} in progress</span>
           )}
         </p>
 
-        <dl className="mb-2 grid grid-cols-1 gap-1 text-[11px]">
+        <dl
+          data-testid="judge-verdict-metrics"
+          className="mb-2 grid grid-cols-1 gap-1 text-[11px]"
+        >
           {[
             ['Sandbox execution', state.build_success === false ? 'failed' : flagText(state.build_success)],
             ['Exploit reproduced', flagText(state.exploit_confirmed)],
@@ -465,6 +542,32 @@ function JudgeSection({ stream }: { stream: FunctionStream }) {
           ))}
         </dl>
 
+        {/* Actual sandbox executions, as they finish. */}
+        <ExecutionResult
+          label="Original vulnerable source"
+          result={state.original}
+          testId="judge-original-result"
+        />
+        <ExecutionResult
+          label="Patched source"
+          result={state.patched}
+          testId="judge-patched-result"
+        />
+        {(state.build_logs || state.test_logs) && (
+          <div className="mb-2 space-y-1 text-[11px] text-white/45">
+            {state.build_logs && (
+              <p>build: {state.build_success ? 'passed' : 'failed'} · regression:{' '}
+                {state.regression_skipped ? 'skipped' : state.test_success ? 'passed' : 'failed'}
+              </p>
+            )}
+            <CodeBlock
+              value={[state.build_logs, state.test_logs].filter(Boolean).join('\n')}
+              tone="text-white/50"
+              maxHeight="max-h-32"
+            />
+          </div>
+        )}
+
         {state.error_logs && (
           <CodeBlock value={state.error_logs} tone="text-red-300" maxHeight="max-h-40" />
         )}
@@ -478,6 +581,7 @@ function JudgeSection({ stream }: { stream: FunctionStream }) {
       icon={<Scale className="h-4 w-4 text-yellow-300" />}
       accent="border-yellow-500/15 bg-yellow-950/5"
       testId="section-judge"
+      stage={stage}
     >
       {body}
     </SectionShell>

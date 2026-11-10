@@ -6,34 +6,30 @@ and generates structured threat reports with synthetic PoC exploit payloads.
 Includes NO_VULNERABILITY_FOUND exit state (Section 4.1 FP exit) and
 language-match validation (EC-7.2).
 
-Generation is split into two bounded model calls:
-
-  1. **Diagnosis** — a compact JSON object (type, CWE, severity, short
-     explanation). Its output is small, so reasoning-enabled models cannot
-     burn the whole budget before the diagnosis is complete.
-  2. **Harness** — a minimal proof of concept, produced only when a defect is
-     reported. If this step truncates or produces an invalid harness, the
-     diagnosis is preserved and the exploit is reported as unavailable — it is
-     never invented and never discarded silently.
+Diagnosis and exploit harness are produced by **one structured model call**:
+`RedAgentReport` carries both, so a reasoning-heavy model cannot spend its
+whole output budget on prose before the harness is written. If the returned
+report diagnoses a defect but carries no usable harness, the diagnosis is
+preserved and **one** corrective regeneration is requested. When that also
+fails the exploit is reported as unavailable with a precise reason — never
+invented, never silently discarded.
 """
 
 from __future__ import annotations
 
-import ast
 import json
 import logging
 import re
 import time
-from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
-from pydantic import BaseModel, Field
-from typing import Optional
+from pydantic import BaseModel, Field, model_validator
 
 from vulnguard.agents.harness import get_adapter
 from vulnguard.agents.harness.environment import RepositoryEnvironment, probe_repository
-from vulnguard.agents.harness.strategies import strategy_for
+from vulnguard.agents.harness.strategies import strategy_catalog, strategy_for
 from vulnguard.agents.state import VulnGuardState
+from vulnguard.agents.streaming import emit
 from vulnguard.config import cfg
 
 logger = logging.getLogger(__name__)
@@ -60,16 +56,16 @@ _REFUSAL_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
-# A parse failure is retried once with a corrective prompt. Provider-level
-# retries/truncation escalation already happen inside `_call_llm`, so this
-# keeps the total number of paid calls bounded.
-_PARSE_ATTEMPTS = 2
+# Provider-level retries/truncation escalation already happen inside
+# `_call_llm`, so this keeps the number of paid calls bounded: one structured
+# report, plus at most one regeneration (or one remediation for unreadable JSON).
+_EXTRA_ATTEMPTS = 1
 
 
 # ── Pydantic output schemas ──────────────────────────────────────────────
 
 class RedAgentDiagnosis(BaseModel):
-    """Compact vulnerability diagnosis — no code in the response."""
+    """Vulnerability diagnosis — the reasoning half of the report."""
 
     vulnerability_found: bool = Field(description="Whether a vulnerability was identified")
     vulnerability_type: Optional[str] = Field(None, description="E.g. SQL_INJECTION, BUFFER_OVERFLOW, XSS")
@@ -82,8 +78,12 @@ class RedAgentDiagnosis(BaseModel):
     confidence: Optional[float] = Field(None, ge=0.0, le=1.0, description="Confidence score 0.0-1.0")
 
 
-class RedAgentHarness(BaseModel):
-    """Minimal executable proof of concept for a diagnosed defect."""
+class RedAgentReport(RedAgentDiagnosis):
+    """Single structured response: diagnosis plus the exploit harness.
+
+    Kept as the one normalized shape consumed by the Blue and Judge agents, so
+    downstream code never needs to know how the model laid its answer out.
+    """
 
     exploit_type: Optional[str] = Field(None, description="python_script, c_harness, cpp_harness, java_harness, javascript_script")
     exploit_code_harness: Optional[str] = Field(None, description="Complete runnable proof-of-concept program")
@@ -92,88 +92,52 @@ class RedAgentHarness(BaseModel):
     expected_vulnerable_behavior: Optional[str] = Field(None, description="Observable result on the vulnerable code")
     expected_patched_behavior: Optional[str] = Field(None, description="Observable result after the fix")
 
+    @model_validator(mode="before")
+    @classmethod
+    def _accept_harness_aliases(cls, data: Any) -> Any:
+        """Accept the obvious alternative key names for the harness body.
 
-class RedAgentReport(RedAgentDiagnosis):
-    """Merged report persisted on the pipeline state.
-
-    Kept as the single normalized shape consumed by the Blue and Judge agents,
-    so downstream code does not need to know generation was split in two.
-    """
-
-    exploit_type: Optional[str] = None
-    exploit_code_harness: Optional[str] = None
-    expected_stdout_regex: Optional[str] = None
-    execution_instructions: Optional[str] = None
-    expected_vulnerable_behavior: Optional[str] = None
-    expected_patched_behavior: Optional[str] = None
+        Models occasionally emit `exploit_code`/`proof_of_concept` while keeping
+        every other field correct. Reading those aliases avoids discarding a
+        real harness; the code itself still passes the same validation.
+        """
+        if not isinstance(data, dict) or data.get("exploit_code_harness"):
+            return data
+        for alias in ("exploit_code", "harness_code", "poc_code", "proof_of_concept", "exploit_harness"):
+            value = data.get(alias)
+            if isinstance(value, str) and value.strip():
+                return {**data, "exploit_code_harness": value}
+        return data
 
 
 # ── Prompt construction ──────────────────────────────────────────────────
 
-_DIAGNOSIS_SYSTEM_PROMPT = """\
-You are a senior software engineer and QA specialist focusing on code correctness and data integrity.
+_ANALYSIS_SYSTEM_PROMPT = """\
+You are a senior software engineer and an authorized security test engineer. You must answer with ONE structured JSON object that contains BOTH the vulnerability diagnosis AND, when a defect exists, a complete runnable proof-of-concept harness for the user's own code.
 
-Analyze the supplied function for a data-flow defect (for example untrusted string interpolation in a query, or an out-of-bounds memory access).
-
-RULES:
-1. If the function operates correctly on all inputs, set vulnerability_found=false.
+## Diagnosis
+1. If the function operates correctly on all inputs, set vulnerability_found=false and leave the harness fields null.
 2. If a defect exists, name the exact defect, the CWE, the affected lines, the location (function or file:line), and the input shape that proves it.
-3. Give a short attack_strategy: how the dangerous input reaches the defect, and what observable effect (a crash, a SQL error, a created file, an extra command) proves it during execution.
-4. Name any minimal runtime prerequisite a proof of concept would need (a database table, a temporary file, a writable directory) in the attack_strategy.
-5. Be concise: the explanation is at most 120 words of plain prose. Do not restate the source, do not include code blocks, and do not propose a fix.
-6. Do NOT write an exploit or test harness here; a separate step does that.
-7. Only report a defect you can justify from the supplied code and context. Set confidence honestly.
+3. Give a short attack_strategy: how the dangerous input reaches the defect, and what observable effect (a crash, a SQL error, a created file, an extra command) proves it during execution. Name any minimal runtime prerequisite the harness needs.
+4. Be concise: the explanation is at most 120 words of plain prose. Do not restate the source and do not propose a fix.
+5. Only report a defect you can justify from the supplied code and context. Set confidence honestly.
 
-Your JSON output MUST conform to this schema (output data, not the schema itself):
-{schema}
-"""
-
-_DIAGNOSIS_USER_PROMPT = """\
-## Target Function
-File: {file_path}
-Language: {language}
-
-```{language}
-{code}
-```
-
-## Context Bundle
-{context}
-
-Diagnose this function. Return only the diagnosis JSON object.
-"""
-
-_COMPACT_DIAGNOSIS_PROMPT = """\
-The previous response was cut off because it was too long. Answer with the smallest possible JSON object and nothing else:
-
-{{"vulnerability_found": true|false, "vulnerability_type": "TYPE_OR_NULL", "explanation": "max 40 words", "confidence": 0.0}}
-
-Target ({language}), file {file_path}:
-```{language}
-{code}
-```
-"""
-
-_HARNESS_SYSTEM_PROMPT = """\
-You are a security test engineer writing authorized, offline sandbox tests for the user's own code. Write a MINIMAL proof-of-concept harness for the vulnerability described by the user.
-
-The target language is {language}. The harness MUST be written in {language} and nothing else — not another programming language, not a shell script, not prose. The sandbox compiles or runs it as a {language} program, so any other language fails before the exploit is tested.
-
-RULES:
-1. The harness must be valid {language} source, at most 80 lines (target 60), with no commentary and no blank lines. Follow this {language} shape:
+## Harness (required whenever vulnerability_found is true)
+1. The target language is {language}. The harness MUST be written in {language} and nothing else — not another programming language, not a shell script, not prose. The sandbox compiles or runs it as a {language} program, so any other language fails before the exploit is tested.
+2. The harness must be valid {language} source, at most 80 lines (target 60), with no commentary and no blank lines. Follow this {language} shape:
 {shape}
-2. It MUST import, link, or otherwise invoke the real target from the supplied workspace. Do NOT copy, restate, or redefine the target function. For C/C++, declare the target's prototype instead of including its .c file.
-3. Use the exact target name and signature: pass the arguments the real application passes. If the target is a method, instantiate its class first.
-4. Create every prerequisite the harness needs inline (for example `sqlite3.connect(':memory:')` plus `CREATE TABLE`, a file under /tmp, an environment value) and use only the standard library. It must never depend on the network, a service, or a file that does not exist in the workspace.
-5. The harness may only create benign prerequisites. It must never run a destructive system command and must never attack anything outside the sandbox.
-6. It must print the success marker ONLY after the security defect is proven. The marker must not appear inside attacker-controlled input or in data printed by the target.
-7. For command injection, use a benign isolated side effect (for example a file under /tmp), verify it, then print the marker.
-8. expected_stdout_regex is REQUIRED and must uniquely match that marker. Printing and matching the literal marker `VULNGUARD_POC_SUCCESS` is the simplest reliable choice.
-9. The assertion must succeed against the original vulnerable source and fail against a secure patch.
-10. Do NOT add third-party dependencies.
-11. Never answer with null fields, an apology, a refusal, or an explanation: exploit_code_harness and expected_stdout_regex must both be non-empty. If you cannot build a perfect PoC, return the best-effort {language} code anyway.
-12. Never switch languages: a C target gets a C harness and a Python target gets a Python harness, even when another language seems easier to write.
-13. `execution_instructions`, `expected_vulnerable_behavior`, and `expected_patched_behavior` are short plain-text sentences. They describe the harness; they are never a substitute for it.
+3. It MUST import, link, or otherwise invoke the real target described by the workspace instruction. Do NOT copy, restate, or redefine the target function. For C/C++, declare the target's prototype instead of including its .c file.
+4. Use the exact target name and signature: pass the arguments the real application passes. If the target is a method, instantiate its class first.
+5. Create every prerequisite the harness needs inline (for example `sqlite3.connect(':memory:')` plus `CREATE TABLE`, a file under /tmp, an environment value) and use only the standard library. It must never depend on the network, a service, or a file that does not exist in the workspace.
+6. The harness may only create benign prerequisites. It must never run a destructive system command and must never attack anything outside the sandbox.
+7. It must print the success marker ONLY after the security defect is proven. The marker must not appear inside attacker-controlled input or in data printed by the target.
+8. For command injection, use a benign isolated side effect (for example a file under /tmp), verify it, then print the marker.
+9. expected_stdout_regex is REQUIRED and must uniquely match that marker. Printing and matching the literal marker `VULNGUARD_POC_SUCCESS` is the simplest reliable choice.
+10. The assertion must succeed against the original vulnerable source and fail against a secure patch.
+11. Do NOT add third-party dependencies.
+12. Never answer with an empty harness, an apology, a refusal, or prose in exploit_code_harness. If you cannot build a perfect PoC, return the best-effort {language} code anyway.
+13. Never switch languages: a C target gets a C harness and a Python target gets a Python harness, even when another language seems easier to write.
+14. `execution_instructions`, `expected_vulnerable_behavior`, and `expected_patched_behavior` are short plain-text sentences. They describe the harness; they are never a substitute for it.
 
 ## Execution adapter ({language})
 {adapter_notes}
@@ -181,28 +145,21 @@ RULES:
 ## Repository environment
 {environment}
 
-## Exploit strategy for this finding
-{strategy}
+## Suggested technique per vulnerability class
+Pick the entry whose class matches your own diagnosis. These are reusable properties of the bug class, never payloads copied from somewhere else.
+{catalog}
 
-Follow the strategy's observable proof and the repository environment's constraints. If a prerequisite cannot be created inside the sandbox, prefer a smaller harness that still proves the defect over an aspirational one that cannot run.
+Follow the matching technique's observable proof and the repository environment's constraints. If a prerequisite cannot be created inside the sandbox, prefer a smaller harness that still proves the defect over an aspirational one that cannot run.
 
-Return only this JSON object, with every field populated:
-{{"exploit_type": "{language}", "exploit_code_harness": "<complete runnable {language} source>", "expected_stdout_regex": "VULNGUARD_POC_SUCCESS", "execution_instructions": "<one command the sandbox runs>", "expected_vulnerable_behavior": "<what the harness shows on the vulnerable code>", "expected_patched_behavior": "<what the harness shows after the fix>"}}
+## Output
+Return exactly one JSON object with every relevant field populated:
+{{"vulnerability_found": true, "vulnerability_type": "COMMAND_INJECTION", "cwe_id": "CWE-78", "severity": "HIGH", "location": "{language} target under analysis", "affected_lines": [1], "attack_strategy": "<how the input reaches the defect and what proves it>", "explanation": "<at most 120 words>", "confidence": 0.9, "exploit_type": "{language}", "exploit_code_harness": "<complete runnable {language} source>", "expected_stdout_regex": "VULNGUARD_POC_SUCCESS", "execution_instructions": "<one command the sandbox runs>", "expected_vulnerable_behavior": "<what the harness shows on the vulnerable code>", "expected_patched_behavior": "<what the harness shows after the fix>"}}
 
 Your JSON output MUST conform to this schema (output data, not the schema itself):
 {schema}
 """
 
-_HARNESS_USER_PROMPT = """\
-## Diagnosed Vulnerability
-Type: {vuln_type}
-CWE: {cwe_id}
-Severity: {severity}
-Location: {location}
-Affected lines: {affected_lines}
-Attack strategy: {attack_strategy}
-Explanation: {explanation}
-
+_ANALYSIS_USER_PROMPT = """\
 ## Target Function ({language})
 File: {file_path}
 Workspace target: {workspace_target}
@@ -214,39 +171,29 @@ Workspace target: {workspace_target}
 ## Context Bundle
 {context}
 
-Write the proof-of-concept harness JSON for this exact target.
+Diagnose this function and, when a defect exists, return the runnable proof-of-concept harness in the SAME JSON object. Return only that JSON object.
 """
 
-_HARNESS_CORRECTION_PROMPT = """\
-Your previous harness was rejected: {reason}
+_PARSE_CORRECTION_PROMPT = """\
+Your previous response could not be read as a valid JSON object matching the schema (parsing failed: {parse_error}).
 
-Regenerate it in {language} — the same language as the target. Do not switch languages, and do not reply with an apology, refusal, explanation, or prose: return best-effort runnable {language} code even if the PoC is imperfect. It must import or link and invoke the supplied workspace target, must not redefine target code, must not treat arbitrary exceptions as proof of exploitation, and must print the marker only after the defect is actually proven.
+Respond again with ONLY one complete JSON object matching the schema in the system prompt. Include the diagnosis fields and, if vulnerability_found is true, the harness fields — exploit_code_harness and expected_stdout_regex must both be non-empty. No prose, no Markdown fences around the object.
+"""
 
-Both fields are REQUIRED and must be non-empty: `exploit_code_harness` (the complete runnable {language} harness) and `expected_stdout_regex` (a regex that uniquely matches the marker the harness prints, for example `VULNGUARD_POC_SUCCESS`).
+_REGENERATION_PROMPT = """\
+Your previous response was rejected: {reason}
+
+Keep its diagnosis exactly as it is (vulnerability_found, vulnerability_type, cwe_id, severity, location, affected_lines, attack_strategy, explanation, confidence). Regenerate the COMPLETE structured report with a usable harness:
+
+- exploit_type: {language}
+- exploit_code_harness: REQUIRED, the complete runnable {language} program that imports/links and invokes the real workspace target. Never redefine the target, never switch languages, never reply with prose.
+- expected_stdout_regex: REQUIRED, a regular expression that uniquely matches VULNGUARD_POC_SUCCESS, printed only after the defect is actually proven.
+- execution_instructions, expected_vulnerable_behavior, expected_patched_behavior: short plain sentences.
 
 Follow this {language} shape:
 {shape}
 
-Reply with only this JSON object:
-{{"exploit_type": "{language}", "exploit_code_harness": "...", "expected_stdout_regex": "...", "execution_instructions": "...", "expected_vulnerable_behavior": "...", "expected_patched_behavior": "..."}}
-"""
-
-# Used after a truncated or unparseable harness response. The point is a much
-# smaller program, so the JSON closes inside a normal output budget.
-_HARNESS_MINIMAL_PROMPT = """\
-The previous harness response was unusable: {reason}
-
-Regenerate the SMALLEST possible runnable {language} proof of concept for the same target. Hard limits:
-- At most 30 lines, no comments, no blank lines, no prose, no explanation.
-- Import or link the workspace target and call it with its real signature; never redefine the target.
-- Set up prerequisites inline with the standard library only (for example an in-memory SQLite table); no network and no missing files.
-- Print VULNGUARD_POC_SUCCESS only after the defect is actually observed. Do not treat an arbitrary exception as proof.
-
-Follow this {language} shape:
-{shape}
-
-Reply with only this JSON object and no other text:
-{{"exploit_type": "{language}", "exploit_code_harness": "<complete {language} source>", "expected_stdout_regex": "VULNGUARD_POC_SUCCESS", "execution_instructions": "<one command>", "expected_vulnerable_behavior": "<vulnerable result>", "expected_patched_behavior": "<result after the fix>"}}
+Reply with only one JSON object containing all of those fields (diagnosis and harness together).
 """
 
 
@@ -269,79 +216,43 @@ def _context_text(state: VulnGuardState) -> str:
     return ContextBundle(**ctx_dict).to_prompt_text()
 
 
-def _diagnosis_messages(state: VulnGuardState, *, compact: bool = False) -> list[dict[str, str]]:
-    if compact:
-        return [
-            {
-                "role": "user",
-                "content": _COMPACT_DIAGNOSIS_PROMPT.format(
-                    language=state["language"],
-                    file_path=state.get("file_path", "unknown"),
-                    code=state["original_code"],
-                ),
-            }
-        ]
-    return [
-        {
-            "role": "system",
-            "content": _DIAGNOSIS_SYSTEM_PROMPT.format(
-                language=state["language"],
-                schema=_schema_json(RedAgentDiagnosis),
-            ),
-        },
-        {
-            "role": "user",
-            "content": _DIAGNOSIS_USER_PROMPT.format(
-                file_path=state.get("file_path", "unknown"),
-                language=state["language"],
-                code=state["original_code"],
-                context=_context_text(state),
-            ),
-        },
-    ]
+def _environment(state: VulnGuardState) -> RepositoryEnvironment:
+    """Bounded probe of the uploaded tree, cached by the module itself."""
+    return probe_repository(
+        state.get("repo_root"), state.get("language", ""), state.get("file_path")
+    )
 
 
-def _harness_messages(
+def _analysis_messages(
     state: VulnGuardState,
-    diagnosis: RedAgentDiagnosis,
     environment: RepositoryEnvironment | None = None,
 ) -> list[dict[str, str]]:
-    """Build the harness request from the adapter, environment and strategy.
+    """Build the single diagnosis + harness request.
 
     Nothing here depends on a particular repository: the module to import, the
-    program shape, the runtime guarantees and the exploit strategy are all
-    derived from the target's language and the uploaded tree.
+    program shape, the runtime guarantees, the environment and the technique
+    catalogue are all derived from the target's language and the uploaded tree.
     """
     language = state["language"]
     adapter = get_adapter(language)
-    env = environment or probe_repository(
-        state.get("repo_root"), language, state.get("file_path")
-    )
-    strategy = strategy_for(diagnosis.vulnerability_type, diagnosis.cwe_id)
-    notes = [adapter.capability_note(), *adapter.prerequisite_notes(diagnosis.vulnerability_type or "")]
+    env = environment or _environment(state)
+    notes = [adapter.capability_note(), *adapter.prerequisite_notes("")]
 
     return [
         {
             "role": "system",
-            "content": _HARNESS_SYSTEM_PROMPT.format(
+            "content": _ANALYSIS_SYSTEM_PROMPT.format(
                 language=language,
-                schema=_schema_json(RedAgentHarness),
+                schema=_schema_json(RedAgentReport),
                 shape=adapter.shape(),
                 adapter_notes="\n".join(f"- {note}" for note in notes),
                 environment=env.to_prompt_text(),
-                strategy=strategy.prompt_block(),
+                catalog=strategy_catalog(),
             ),
         },
         {
             "role": "user",
-            "content": _HARNESS_USER_PROMPT.format(
-                vuln_type=diagnosis.vulnerability_type or "unknown",
-                cwe_id=diagnosis.cwe_id or "unknown",
-                severity=diagnosis.severity or "unknown",
-                location=diagnosis.location or state.get("function_id", "unknown"),
-                affected_lines=diagnosis.affected_lines or "unknown",
-                attack_strategy=diagnosis.attack_strategy or "(not supplied)",
-                explanation=diagnosis.explanation or "",
+            "content": _ANALYSIS_USER_PROMPT.format(
                 language=language,
                 file_path=state.get("file_path", "unknown"),
                 workspace_target=adapter.workspace_target_instruction(state),
@@ -350,6 +261,30 @@ def _harness_messages(
             ),
         },
     ]
+
+
+def _regeneration_messages(
+    state: VulnGuardState,
+    environment: RepositoryEnvironment,
+    previous: str,
+    reason: str,
+) -> list[dict[str, str]]:
+    """Ask once for the complete report again, naming the exact rejection."""
+    language = state["language"]
+    messages = _analysis_messages(state, environment)
+    if previous:
+        messages.append({"role": "assistant", "content": previous})
+    messages.append(
+        {
+            "role": "user",
+            "content": _REGENERATION_PROMPT.format(
+                reason=reason,
+                language=language,
+                shape=_harness_shape(language),
+            ),
+        }
+    )
+    return messages
 
 
 # ── LLM invocation ───────────────────────────────────────────────────────
@@ -375,6 +310,7 @@ def _call_llm(
                 "cwe_id": "CWE-999",
                 "severity": "HIGH",
                 "affected_lines": [1, 2],
+                "attack_strategy": "Mock strategy.",
                 "explanation": "Mock vulnerability reported by the mock Red Agent.",
                 "confidence": 0.95,
             }
@@ -482,240 +418,180 @@ def _sanitize_exploit(report: RedAgentReport) -> RedAgentReport:
     return report
 
 
-# ── Generation helpers ────────────────────────────────────────────────────
+# ── Generation ────────────────────────────────────────────────────────────
 
-def _parse_with_repair(
-    messages: list[dict[str, str]],
-    schema: type[BaseModel],
-    *,
-    risk_score: float,
-    corrective: str,
-    max_tokens: int | None = None,
-) -> tuple[Any | None, str, str]:
-    """Call the model and parse it, retrying once with a corrective prompt.
+def _harness_problem(report: RedAgentReport, state: VulnGuardState) -> tuple[str | None, str]:
+    """Why the report cannot be executed as evidence, or ``(None, "")``.
 
-    Returns ``(instance | None, failure_reason, raw_text)``. Provider errors
-    propagate as typed `LLMCallError` so the caller can decide what to do.
+    The second element is the failure kind recorded on the pipeline state:
+    ``EXPLOIT_GENERATION_FAILED`` when no artifact exists (missing, empty or
+    prose), ``HARNESS_INVALID`` when code exists but static validation rejects
+    it. Neither means the vulnerability is absent.
     """
-    from vulnguard.agents.llm_parsing import parse_agent_json, raw_response_preview
-
-    raw = ""
-    parse_error = ""
-    current = list(messages)
-    for attempt in range(1, _PARSE_ATTEMPTS + 1):
-        # The first attempt owns the full provider retry budget; the corrective
-        # attempt is a single call so nested retries stay bounded.
-        raw = _call_llm(
-            current,
-            risk_score=risk_score,
-            retries=cfg.llm.max_retries if attempt == 1 else 1,
-            base_max_tokens=max_tokens,
-        )
-        instance, parse_error = parse_agent_json(raw, schema)
-        if instance is not None:
-            return instance, "", raw
-
-        logger.error(
-            "Unparseable %s response (attempt %d/%d): %s",
-            schema.__name__,
-            attempt,
-            _PARSE_ATTEMPTS,
-            parse_error,
-        )
-        logger.error("RAW RESPONSE: %s", raw_response_preview(raw))
-        if attempt < _PARSE_ATTEMPTS:
-            current = current + [
-                {"role": "assistant", "content": raw},
-                {"role": "user", "content": corrective.format(parse_error=parse_error)},
-            ]
-    return None, parse_error, raw
+    harness = (report.exploit_code_harness or "").strip()
+    if not harness:
+        return "the harness JSON had no exploit_code_harness", "EXPLOIT_GENERATION_FAILED"
+    if _looks_like_prose(harness):
+        return "the harness is an explanation or refusal, not runnable code", "EXPLOIT_GENERATION_FAILED"
+    error = _exploit_validation_error(report, state)
+    if error:
+        return error, "HARNESS_INVALID"
+    return None, ""
 
 
-def _diagnose(state: VulnGuardState, risk_score: float) -> tuple[RedAgentDiagnosis | None, str, str]:
-    """Produce a diagnosis, falling back to a compact request on truncation."""
-    from vulnguard.agents.llm_calls import LLMCallError, LLMTruncationError
-    from vulnguard.agents.llm_parsing import raw_response_preview
-
-    corrective = (
-        "Your previous response was not valid JSON matching the requested schema "
-        "(parsing failed: {parse_error}). Respond again with ONLY a single complete "
-        "JSON object matching the schema exactly — no prose and no code."
+def _merged_with_harness(report: RedAgentReport, retry: RedAgentReport) -> RedAgentReport:
+    """Keep the original diagnosis and take only the harness from the retry."""
+    merged = report.model_dump()
+    merged.update(
+        {
+            "exploit_type": retry.exploit_type,
+            "exploit_code_harness": retry.exploit_code_harness,
+            "expected_stdout_regex": retry.expected_stdout_regex,
+            "execution_instructions": retry.execution_instructions,
+            "expected_vulnerable_behavior": retry.expected_vulnerable_behavior,
+            "expected_patched_behavior": retry.expected_patched_behavior,
+        }
     )
-    try:
-        diagnosis, error, raw = _parse_with_repair(
-            _diagnosis_messages(state),
-            RedAgentDiagnosis,
-            risk_score=risk_score,
-            corrective=corrective,
-        )
-        if diagnosis is not None:
-            return diagnosis, "", raw
-        # A truncated or malformed full diagnosis gets one compact retry: the
-        # payload is small enough that it cannot exhaust the output budget.
-        logger.warning("Full diagnosis unusable (%s) — retrying in compact mode", error)
-    except LLMTruncationError as exc:
-        logger.warning("Diagnosis truncated (%s) — retrying in compact mode", exc)
-    except LLMCallError as exc:
-        return None, str(exc), getattr(exc, "partial_response", "")
-
-    try:
-        diagnosis, error, raw = _parse_with_repair(
-            _diagnosis_messages(state, compact=True),
-            RedAgentDiagnosis,
-            risk_score=risk_score,
-            corrective=corrective,
-        )
-    except LLMCallError as exc:
-        return None, str(exc), getattr(exc, "partial_response", "")
-
-    if diagnosis is None:
-        preview = raw_response_preview(raw)
-        return None, error, preview
-    return diagnosis, "", raw
+    return RedAgentReport(**merged)
 
 
-def _generate_harness(
+def _analyze(
     state: VulnGuardState,
-    diagnosis: RedAgentDiagnosis,
     risk_score: float,
-) -> tuple[RedAgentHarness | None, str, str]:
-    """Produce and validate a proof of concept, or an honest failure.
+) -> tuple[RedAgentReport | None, str, str, str]:
+    """One structured request; at most one bounded regeneration.
 
-    Returns ``(harness | None, failure_message, failure_kind)`` where
-    ``failure_kind`` is one of ``""``, ``EXPLOIT_GENERATION_FAILED`` (the model
-    refused, truncated, or returned something unparseable) or
-    ``HARNESS_INVALID`` (code was produced but rejected by static validation).
+    Returns ``(report | None, failure_reason, failure_kind, raw_response)``.
 
-    Two bounded calls at most: the structured request, then one smaller
-    regeneration with a larger output budget. A truncated response is never
-    re-asked with the same budget, because that is guaranteed to fail again.
+    * ``report`` is the merged diagnosis + harness when usable, or a
+      diagnosis-only report when the harness could not be produced.
+    * ``failure_reason`` / ``failure_kind`` describe a missing or rejected
+      harness. They are empty when the report is fully usable.
+    * ``None`` means the model could not even be read as a report (a response
+      failure), so there is no diagnosis to preserve.
     """
-    from vulnguard.agents.llm_calls import LLMCallError, LLMTruncationError
+    from vulnguard.agents.llm_calls import LLMCallError
     from vulnguard.agents.llm_parsing import parse_agent_json
 
     language = state["language"]
-    environment = probe_repository(
-        state.get("repo_root"), language, state.get("file_path")
-    )
+    environment = _environment(state)
     env_suffix = (
         f" Environment: {environment.limitations_text()}"
         if environment.limitations
         else ""
     )
-    base_budget = int(
-        getattr(cfg.llm, "harness_max_tokens", 0) or cfg.llm.max_tokens
-    )
     ceiling = int(cfg.llm.max_token_ceiling)
-    first_budget = min(base_budget, ceiling)
+    budget = min(
+        int(getattr(cfg.llm, "harness_max_tokens", 0) or cfg.llm.max_tokens),
+        ceiling,
+    )
 
-    raw = ""
-    reason = ""
-    kind = "EXPLOIT_GENERATION_FAILED"
-
+    # ── The single structured call: diagnosis + harness together ──────────
     try:
         raw = _call_llm(
-            _harness_messages(state, diagnosis, environment),
+            _analysis_messages(state, environment),
             risk_score=risk_score,
             retries=cfg.llm.max_retries,
-            base_max_tokens=first_budget,
-        )
-    except LLMTruncationError as exc:
-        raw = getattr(exc, "partial_response", "") or ""
-        reason = (
-            "harness generation was truncated "
-            f"(finish_reason={exc.finish_reason or 'length'})"
+            base_max_tokens=budget,
         )
     except LLMCallError as exc:
-        return (
-            None,
-            f"harness generation failed: {exc}{env_suffix}",
-            "EXPLOIT_GENERATION_FAILED",
-        )
-    else:
-        harness, parse_error = parse_agent_json(raw, RedAgentHarness)
-        if harness is None:
-            reason = f"harness response was not parseable: {parse_error}"
-        elif not harness.exploit_code_harness:
-            reason = "the harness JSON had no exploit_code_harness"
-        else:
-            merged = RedAgentReport(**diagnosis.model_dump(), **harness.model_dump())
-            validation_error = _exploit_validation_error(merged, state)
-            if validation_error is None:
-                return harness, "", ""
-            reason = validation_error
-            # A refusal or prose is a generation failure, not a malformed
-            # harness: no executable artifact exists to judge.
-            kind = (
-                "EXPLOIT_GENERATION_FAILED"
-                if _looks_like_prose(harness.exploit_code_harness or "")
-                else "HARNESS_INVALID"
-            )
+        return None, str(exc), "EXPLOIT_GENERATION_FAILED", getattr(exc, "partial_response", "")
 
-    logger.warning(
-        "Harness unusable (%s) — regenerating a minimal %s harness", reason, language
-    )
-    retry_messages = _harness_messages(state, diagnosis, environment)
-    if raw:
-        retry_messages = retry_messages + [{"role": "assistant", "content": raw}]
-    retry_messages = retry_messages + [
-        {
-            "role": "user",
-            "content": _HARNESS_MINIMAL_PROMPT.format(
-                reason=reason,
-                language=language,
-                shape=_harness_shape(language),
-            ),
-        }
-    ]
-    retry_budget = min(max(first_budget * 2, first_budget + 1024), ceiling)
+    report, parse_error = parse_agent_json(raw, RedAgentReport)
+
+    if report is None:
+        # The JSON itself was unreadable, so no diagnosis exists yet. One
+        # remediation request is allowed; it asks for the whole object again.
+        logger.warning(
+            "Red Agent response unparseable (%s) — requesting one corrective report",
+            parse_error,
+        )
+        messages = _analysis_messages(state, environment) + [
+            {"role": "assistant", "content": raw},
+            {
+                "role": "user",
+                "content": _PARSE_CORRECTION_PROMPT.format(parse_error=parse_error),
+            },
+        ]
+        try:
+            corrected = _call_llm(
+                messages,
+                risk_score=risk_score,
+                retries=_EXTRA_ATTEMPTS,
+                base_max_tokens=budget,
+            )
+        except LLMCallError as exc:
+            return (
+                None,
+                f"the model response was not readable as a report ({parse_error}); "
+                f"the corrective request failed: {exc}",
+                "EXPLOIT_GENERATION_FAILED",
+                raw,
+            )
+        report, corrected_error = parse_agent_json(corrected, RedAgentReport)
+        if report is None:
+            return (
+                None,
+                "the model response was not readable as a report even after one "
+                f"correction ({corrected_error})",
+                "EXPLOIT_GENERATION_FAILED",
+                corrected,
+            )
+        raw = corrected
+
+    if not report.vulnerability_found:
+        return report, "", "", raw
+
+    reason, kind = _harness_problem(report, state)
+    if reason is None:
+        return report, "", "", raw
+
+    # ── One bounded regeneration, keeping the diagnosis ───────────────────
+    logger.warning("Red Agent harness unusable (%s) — one regeneration", reason)
+    retry_budget = min(max(budget * 2, budget + 1024), ceiling)
     try:
         retry_raw = _call_llm(
-            retry_messages,
+            _regeneration_messages(state, environment, raw, reason),
             risk_score=risk_score,
-            retries=1,
+            retries=_EXTRA_ATTEMPTS,
             base_max_tokens=retry_budget,
-        )
-    except LLMTruncationError as exc:
-        return (
-            None,
-            f"{reason}; corrected harness unavailable: {exc}{env_suffix}",
-            "EXPLOIT_GENERATION_FAILED",
         )
     except LLMCallError as exc:
         return (
-            None,
-            f"{reason}; corrected harness unavailable: {exc}{env_suffix}",
-            "EXPLOIT_GENERATION_FAILED",
+            report,
+            f"{reason}; the regenerated harness is unavailable: {exc}{env_suffix}",
+            kind,
+            raw,
         )
 
-    retry_harness, retry_error = parse_agent_json(retry_raw, RedAgentHarness)
-    if retry_harness is None:
+    retry_report, retry_parse_error = parse_agent_json(retry_raw, RedAgentReport)
+    if retry_report is None:
         return (
-            None,
-            f"{reason}; corrected harness unparseable: {retry_error}{env_suffix}",
-            "EXPLOIT_GENERATION_FAILED",
+            report,
+            f"{reason}; the regenerated report was unreadable: {retry_parse_error}{env_suffix}",
+            kind,
+            retry_raw,
         )
-    if not retry_harness.exploit_code_harness:
+    if not retry_report.vulnerability_found:
         return (
-            None,
-            f"{reason}; the model did not provide an exploit harness{env_suffix}",
-            "EXPLOIT_GENERATION_FAILED",
+            report,
+            f"{reason}; the regenerated report denied the diagnosis, so the "
+            f"original diagnosis was kept{env_suffix}",
+            kind,
+            retry_raw,
         )
 
-    merged = RedAgentReport(**diagnosis.model_dump(), **retry_harness.model_dump())
-    retry_validation_error = _exploit_validation_error(merged, state)
-    if retry_validation_error:
-        retry_kind = (
-            "EXPLOIT_GENERATION_FAILED"
-            if _looks_like_prose(retry_harness.exploit_code_harness)
-            else "HARNESS_INVALID"
-        )
+    retry_reason, retry_kind = _harness_problem(retry_report, state)
+    if retry_reason:
         return (
-            None,
-            f"{reason}; corrected harness still invalid: {retry_validation_error}{env_suffix}",
-            retry_kind,
+            report,
+            f"{reason}; the regenerated harness is still unusable: {retry_reason}{env_suffix}",
+            retry_kind or kind,
+            retry_raw,
         )
-    return retry_harness, "", ""
+
+    logger.info("Red Agent: regenerated harness accepted in %s", language)
+    return _merged_with_harness(report, retry_report), "", "", retry_raw
 
 
 # ── LangGraph node function ──────────────────────────────────────────────
@@ -723,9 +599,7 @@ def _generate_harness(
 def _report_payload(report: RedAgentReport, state: VulnGuardState) -> dict[str, Any]:
     """Persisted report plus the environment assumptions behind the harness."""
     payload = report.model_dump()
-    payload["harness_environment"] = probe_repository(
-        state.get("repo_root"), state.get("language", ""), state.get("file_path")
-    ).to_dict()
+    payload["harness_environment"] = _environment(state).to_dict()
     return payload
 
 
@@ -758,6 +632,11 @@ def _error_update(
     }
 
 
+def _diagnosis_summary(report: RedAgentReport) -> dict[str, Any]:
+    """The diagnosis fields shown as soon as they are known."""
+    return RedAgentDiagnosis(**report.model_dump()).model_dump()
+
+
 def red_agent_node(state: VulnGuardState) -> dict[str, Any]:
     """LangGraph node: Run Red Agent analysis.
 
@@ -771,21 +650,55 @@ def red_agent_node(state: VulnGuardState) -> dict[str, Any]:
     timestamps = dict(state.get("timestamps", {}))
     risk_score = state.get("risk_score", 100.0)
 
+    emit(
+        state,
+        "red_started",
+        agent="red_agent",
+        attempt_number=state.get("attempt_number", 0),
+    )
+
     try:
-        diagnosis, error, raw = _diagnose(state, risk_score)
-        if diagnosis is None:
+        report, failure, failure_kind, raw = _analyze(state, risk_score)
+
+        if report is None:
+            emit(
+                state,
+                "red_completed",
+                agent="red_agent",
+                vulnerability_found=False,
+                exploit_status="ERROR",
+                pipeline_status="RED_ERROR",
+                exploit_error=failure,
+            )
             return _error_update(
                 state["function_id"],
-                error or "the model did not return a usable diagnosis",
+                failure or "the model did not return a usable report",
+                parse_error=failure,
                 raw=raw,
                 timestamps={**timestamps, "red_end": time.time()},
             )
 
-        if not diagnosis.vulnerability_found:
+        emit(
+            state,
+            "red_diagnosis",
+            agent="red_agent",
+            vulnerability_found=bool(report.vulnerability_found),
+            diagnosis=_diagnosis_summary(report),
+        )
+
+        if not report.vulnerability_found:
             elapsed = time.time() - start
             logger.info("🔴 Red Agent: no vulnerability found (%.1fs)", elapsed)
+            emit(
+                state,
+                "red_completed",
+                agent="red_agent",
+                vulnerability_found=False,
+                exploit_status="NONE",
+                pipeline_status="RED_COMPLETE",
+            )
             return {
-                "red_report": RedAgentReport(**diagnosis.model_dump()).model_dump(),
+                "red_report": _report_payload(report, state),
                 "vulnerability_found": False,
                 "exploit_harness": None,
                 "exploit_type": None,
@@ -797,27 +710,18 @@ def red_agent_node(state: VulnGuardState) -> dict[str, Any]:
                 "timestamps": {**timestamps, "red_end": time.time()},
             }
 
-        # ── Exploit generation — never allowed to discard the diagnosis ──
-        harness, harness_error, harness_failure_kind = _generate_harness(
-            state, diagnosis, risk_score
-        )
-        report = RedAgentReport(
-            **diagnosis.model_dump(), **(harness.model_dump() if harness else {})
-        )
-
-        if harness is None or not harness.exploit_code_harness:
-            logger.warning(
-                "🔴 Diagnosis kept, exploit unavailable for %s: %s",
-                state["function_id"],
-                harness_error or "no harness returned",
-            )
-            # A generated-but-rejected harness is INVALID; a refusal, truncation,
-            # empty response, or provider failure left us with no harness at all,
-            # which is UNAVAILABLE. Neither is evidence that the defect is absent.
+        # ── Harness evidence — the diagnosis is never discarded ──────────
+        if failure:
+            # The returned code (if any) was rejected; it must not be exposed
+            # as an executable artifact. Only the diagnosis survives.
+            cleared = report.model_dump()
+            cleared.update({"exploit_code_harness": None, "expected_stdout_regex": None})
+            report = RedAgentReport(**cleared)
             exploit_status = (
-                "INVALID" if harness_failure_kind == "HARNESS_INVALID" else "UNAVAILABLE"
+                "INVALID" if failure_kind == "HARNESS_INVALID" else "UNAVAILABLE"
             )
-            exploit_failure_kind = harness_failure_kind or "EXPLOIT_GENERATION_FAILED"
+            exploit_failure_kind = failure_kind or "EXPLOIT_GENERATION_FAILED"
+            harness_error = failure
         elif report.exploit_code_harness and _DANGEROUS_PATTERNS.search(
             report.exploit_code_harness
         ):
@@ -828,6 +732,19 @@ def red_agent_node(state: VulnGuardState) -> dict[str, Any]:
         else:
             exploit_status = "AVAILABLE"
             exploit_failure_kind = ""
+            harness_error = None
+
+        emit(
+            state,
+            "red_harness_generated",
+            agent="red_agent",
+            exploit_type=report.exploit_type,
+            exploit_code_harness=report.exploit_code_harness,
+            expected_stdout_regex=report.expected_stdout_regex,
+            exploit_status=exploit_status,
+            exploit_failure_kind=exploit_failure_kind,
+            exploit_error=harness_error,
+        )
 
         elapsed = time.time() - start
         logger.info(
@@ -839,6 +756,17 @@ def red_agent_node(state: VulnGuardState) -> dict[str, Any]:
             elapsed,
         )
 
+        emit(
+            state,
+            "red_completed",
+            agent="red_agent",
+            vulnerability_found=True,
+            diagnosis=_diagnosis_summary(report),
+            exploit_status=exploit_status,
+            exploit_failure_kind=exploit_failure_kind,
+            exploit_error=harness_error,
+            pipeline_status="RED_COMPLETE",
+        )
         return {
             "red_report": _report_payload(report, state),
             "vulnerability_found": True,
@@ -846,13 +774,22 @@ def red_agent_node(state: VulnGuardState) -> dict[str, Any]:
             "exploit_type": report.exploit_type,
             "expected_stdout_regex": report.expected_stdout_regex,
             "exploit_status": exploit_status,
-            "exploit_error": harness_error or None,
+            "exploit_error": harness_error,
             "exploit_failure_kind": exploit_failure_kind,
             "pipeline_status": "RED_COMPLETE",
             "timestamps": {**timestamps, "red_end": time.time()},
         }
     except Exception as exc:  # defensive: no agent exception escapes to the graph
         logger.exception("🔴 Red Agent failed unexpectedly for %s", state.get("function_id"))
+        emit(
+            state,
+            "red_completed",
+            agent="red_agent",
+            vulnerability_found=False,
+            exploit_status="ERROR",
+            pipeline_status="RED_ERROR",
+            exploit_error=f"Red Agent internal error: {exc}",
+        )
         return _error_update(
             state.get("function_id", "unknown"),
             f"Red Agent internal error: {exc}",

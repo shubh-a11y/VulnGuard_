@@ -28,6 +28,9 @@ class VulnGuardState(TypedDict):
     """
 
     # ── Immutable Context (frozen — set once, never mutated) ──────────
+    # Identifies the live scan whose WebSocket receives progressive events.
+    # Empty for CLI/evaluation runs, which have no stream attached.
+    scan_id: str
     function_id: str
     original_code: str
     language: str
@@ -91,10 +94,12 @@ def initial_state(
     start_byte: Optional[int] = None,
     end_byte: Optional[int] = None,
     max_attempts: int = 3,
+    scan_id: str = "",
 ) -> VulnGuardState:
     """Create a fresh pipeline state with defaults."""
     return VulnGuardState(
         # Immutable context
+        scan_id=scan_id,
         function_id=function_id,
         original_code=code,
         language=language,

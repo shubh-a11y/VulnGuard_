@@ -400,6 +400,121 @@ describe('AgentFeed multi-function stream', () => {
     expect(screen.getByText(/No extracted features reported/)).toBeInTheDocument();
   });
 
+  it('fills ML triage, Red, Blue and Judge sequentially from progressive events', () => {
+    const stream = streamFor('run', [
+      {
+        type: 'triage_result',
+        score: 88.2,
+        threshold: 65,
+        is_high_risk: true,
+        features: {
+          maintainability_index: 63.03,
+          loc: 13,
+          cyclomatic_complexity: 1,
+        },
+      },
+      { type: 'red_started' },
+      {
+        type: 'red_diagnosis',
+        vulnerability_found: true,
+        diagnosis: {
+          vulnerability_type: 'CODE_INJECTION',
+          cwe_id: 'CWE-95',
+          severity: 'HIGH',
+          explanation: 'eval executes attacker input.',
+        },
+      },
+      {
+        type: 'red_harness_generated',
+        exploit_type: 'python_script',
+        exploit_code_harness: 'print("STREAMED_HARNESS")',
+        expected_stdout_regex: 'VULNGUARD_POC_SUCCESS',
+        exploit_status: 'AVAILABLE',
+      },
+      {
+        type: 'red_completed',
+        vulnerability_found: true,
+        exploit_status: 'AVAILABLE',
+        pipeline_status: 'RED_COMPLETE',
+      },
+      {
+        type: 'blue_patch_generated',
+        patched_code: 'def run(value):\n    return int(value)',
+        patch_diff: '--- original\n+++ patched\n+    return int(value)',
+        patch_justification: 'Parse the value instead of executing it.',
+      },
+      {
+        type: 'judge_original_result',
+        ran: true,
+        reproduced: true,
+        success: true,
+        logs: 'STREAMED_ORIGINAL_LOG',
+      },
+      {
+        type: 'judge_patched_result',
+        ran: true,
+        reproduced: false,
+        success: false,
+        logs: 'STREAMED_PATCHED_LOG',
+      },
+      {
+        type: 'judge_completed',
+        judge_verdict: 'PASS',
+        pipeline_status: 'COMPLETE',
+        build_success: true,
+        test_success: true,
+        exploit_confirmed: true,
+        exploit_blocked: true,
+        security_validated: true,
+      },
+    ]);
+
+    render(<AgentFeed streams={[stream]} />);
+
+    const article = card(stream);
+    expect(within(article).getByText(/STREAMED_HARNESS/)).toBeInTheDocument();
+    expect(within(article).getByText(/STREAMED_ORIGINAL_LOG/)).toBeInTheDocument();
+    expect(within(article).getByText(/STREAMED_PATCHED_LOG/)).toBeInTheDocument();
+    expect(within(article).getByTestId('judge-original-result')).toBeInTheDocument();
+    expect(within(article).getByTestId('judge-patched-result')).toBeInTheDocument();
+
+    // ML triage metrics stay visible alongside the agent results.
+    expect(within(article).getByText(/maintainability index/)).toBeInTheDocument();
+    expect(within(article).getByText('63.03')).toBeInTheDocument();
+    expect(within(article).getByText('13')).toBeInTheDocument();
+
+    // Judge metrics are preserved.
+    expect(within(article).getByTestId('judge-verdict-metrics')).toHaveTextContent(
+      'Exploit reproduced',
+    );
+    expect(within(article).getByTestId('judge-verdict-metrics')).toHaveTextContent(
+      'Security validated',
+    );
+    expect(within(article).getAllByText('PASS').length).toBeGreaterThan(0);
+  });
+
+  it('shows each agent as running only after it starts and complete after its completion event', () => {
+    const running = streamFor('run', [
+      { type: 'red_started' },
+      { type: 'red_diagnosis', vulnerability_found: true, diagnosis: { vulnerability_type: 'XSS' } },
+      { type: 'red_harness_generated', exploit_code_harness: 'print(1)', exploit_status: 'AVAILABLE' },
+    ]);
+
+    const { unmount } = render(<AgentFeed streams={[running]} />);
+    const redRunning = within(card(running)).getByTestId('section-red');
+    expect(within(redRunning).getByTestId('stage-running')).toBeInTheDocument();
+    expect(within(redRunning).queryByTestId('stage-complete')).not.toBeInTheDocument();
+    unmount();
+
+    const finished = streamFor('run', [
+      { type: 'red_started' },
+      { type: 'red_completed', vulnerability_found: true, exploit_status: 'AVAILABLE' },
+    ]);
+    render(<AgentFeed streams={[finished]} />);
+    const redComplete = within(card(finished)).getByTestId('section-red');
+    expect(within(redComplete).getByTestId('stage-complete')).toBeInTheDocument();
+  });
+
   it('renders the whole vertical sequence for a function that is still queued', () => {
     const stream = streamFor('queued_function');
 

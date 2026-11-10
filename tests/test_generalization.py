@@ -69,8 +69,18 @@ def _state(payload: dict) -> dict:
     return state
 
 
+def _report(diagnosis: str, harness: str) -> str:
+    """The single structured response: diagnosis and harness together."""
+    payload = json.loads(diagnosis)
+    payload.update(json.loads(harness))
+    return json.dumps(payload)
+
+
 def _run(state: dict, diagnosis: str, harness: str) -> dict:
-    with patch("vulnguard.agents.red_agent._call_llm", side_effect=[diagnosis, harness]) as call:
+    with patch(
+        "vulnguard.agents.red_agent._call_llm",
+        return_value=_report(diagnosis, harness),
+    ) as call:
         result = red_agent_node(state)
     return result, call
 
@@ -144,7 +154,7 @@ def test_independent_python_repository_generates_a_repository_specific_harness(i
     result, call = _run(_state(invoices_repo), _diagnosis(), _harness(exploit_code_harness=harness))
 
     assert result["exploit_status"] == "AVAILABLE", result.get("exploit_error")
-    prompt = call.call_args_list[1].args[0]
+    prompt = call.call_args_list[0].args[0]
     prompt_text = "\n".join(message["content"] for message in prompt)
 
     # Everything the model needs is derived from this repository.
@@ -198,7 +208,7 @@ def test_independent_c_repository_uses_the_c_adapter(tmp_path: Path):
 
     assert result["exploit_status"] == "AVAILABLE", result.get("exploit_error")
     prompt_text = "\n".join(
-        message["content"] for message in call.call_args_list[1].args[0]
+        message["content"] for message in call.call_args_list[0].args[0]
     )
     assert "int main(void)" in prompt_text
     assert "AddressSanitizer" in prompt_text

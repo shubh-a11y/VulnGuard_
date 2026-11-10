@@ -362,3 +362,156 @@ def test_ws_failure_does_not_block_the_next_scan(monkeypatch, tmp_path):
 
     assert second_events[-1]["type"] == "complete"
     assert second_events[-1]["judge_verdict"] == "PASS"
+
+
+class _StreamingGraph:
+    """Emits real per-agent events, exactly like the agent nodes do."""
+
+    async def astream(self, state):
+        from vulnguard.agents.streaming import emit
+
+        emit(state, "red_started", agent="red_agent")
+        emit(
+            state,
+            "red_diagnosis",
+            agent="red_agent",
+            vulnerability_found=True,
+            diagnosis={"vulnerability_type": "CODE_INJECTION", "cwe_id": "CWE-95"},
+        )
+        emit(
+            state,
+            "red_harness_generated",
+            agent="red_agent",
+            exploit_code_harness="print('EXPLOIT_SUCCESS')",
+            expected_stdout_regex="EXPLOIT_SUCCESS",
+            exploit_status="AVAILABLE",
+        )
+        emit(
+            state,
+            "red_completed",
+            agent="red_agent",
+            vulnerability_found=True,
+            exploit_status="AVAILABLE",
+            pipeline_status="RED_COMPLETE",
+        )
+        yield {
+            "red_agent": {
+                "vulnerability_found": True,
+                "exploit_harness": "print('EXPLOIT_SUCCESS')",
+                "expected_stdout_regex": "EXPLOIT_SUCCESS",
+                "exploit_status": "AVAILABLE",
+                "pipeline_status": "RED_COMPLETE",
+            }
+        }
+
+        emit(state, "blue_started", agent="blue_agent")
+        emit(
+            state,
+            "blue_patch_generated",
+            agent="blue_agent",
+            patched_code="def unsafe(value):\n    return value",
+            patch_diff="--- original\n+++ patched\n+    return value",
+            patch_justification="Stop evaluating input.",
+        )
+        emit(
+            state,
+            "blue_completed",
+            agent="blue_agent",
+            pipeline_status="BLUE_COMPLETE",
+            patched_code="def unsafe(value):\n    return value",
+            patch_diff="--- original\n+++ patched\n+    return value",
+            patch_justification="Stop evaluating input.",
+        )
+        yield {
+            "blue_agent": {
+                "patched_code": "def unsafe(value):\n    return value",
+                "patch_diff": "--- original\n+++ patched\n+    return value",
+                "patch_justification": "Stop evaluating input.",
+                "pipeline_status": "BLUE_COMPLETE",
+            }
+        }
+
+        emit(state, "judge_started", agent="judge_agent")
+        emit(
+            state,
+            "judge_original_result",
+            agent="judge_agent",
+            ran=True,
+            reproduced=True,
+            success=True,
+            logs="ORIGINAL_EXECUTION_LOG",
+        )
+        emit(
+            state,
+            "judge_patched_result",
+            agent="judge_agent",
+            ran=True,
+            reproduced=False,
+            success=False,
+            logs="PATCHED_EXECUTION_LOG",
+        )
+        emit(
+            state,
+            "judge_completed",
+            agent="judge_agent",
+            judge_verdict="PASS",
+            pipeline_status="COMPLETE",
+            build_success=True,
+            test_success=True,
+            exploit_confirmed=True,
+            exploit_blocked=True,
+            security_validated=True,
+        )
+        yield {
+            "judge_agent": {
+                "judge_verdict": "PASS",
+                "pipeline_status": "COMPLETE",
+                "security_validated": True,
+            }
+        }
+
+
+def test_ws_streams_each_agent_result_in_pipeline_order(monkeypatch, tmp_path):
+    _patch_high_risk_scorer(monkeypatch)
+    monkeypatch.setattr("vulnguard.agents.graph.compile_graph", lambda: _StreamingGraph())
+
+    app = create_app(db_path=tmp_path / "scans.db", upload_root=tmp_path / "uploads")
+    with TestClient(app) as client:
+        function = _upload_function(client)
+        events = _scan_events(client, function)
+
+    types = [event["type"] for event in events]
+    expected_order = [
+        "red_started",
+        "red_diagnosis",
+        "red_harness_generated",
+        "red_completed",
+        "agent_update",
+        "blue_started",
+        "blue_patch_generated",
+        "blue_completed",
+        "judge_started",
+        "judge_original_result",
+        "judge_patched_result",
+        "judge_completed",
+    ]
+    assert [types.index(name) for name in expected_order] == sorted(
+        types.index(name) for name in expected_order
+    )
+
+    by_type = {event["type"]: event for event in events if event["type"] not in {"agent_update"}}
+    assert by_type["red_diagnosis"]["diagnosis"]["vulnerability_type"] == "CODE_INJECTION"
+    assert by_type["red_harness_generated"]["exploit_code_harness"].startswith("print")
+    assert by_type["blue_patch_generated"]["patched_code"].startswith("def unsafe")
+    assert by_type["judge_original_result"]["logs"] == "ORIGINAL_EXECUTION_LOG"
+    assert by_type["judge_patched_result"]["logs"] == "PATCHED_EXECUTION_LOG"
+    assert by_type["judge_completed"]["security_validated"] is True
+
+    for event in events:
+        if event["type"] in {"status", "complete", "error"}:
+            continue
+        assert event["scan_id"] == events[-1]["scan_id"]
+        assert event["function_id"] == function["id"]
+
+    assert events[-1]["type"] == "complete"
+    assert events[-1]["judge_verdict"] == "PASS"

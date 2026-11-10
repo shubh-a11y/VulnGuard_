@@ -25,7 +25,7 @@ from vulnguard.agents.red_agent import (
     RedAgentReport,
     _call_llm,
     _exploit_validation_error,
-    _harness_messages,
+    _analysis_messages,
     red_agent_node,
     _validate_exploit_language,
     _sanitize_exploit,
@@ -95,14 +95,15 @@ class TestRedAgentReport:
         parsed = RedAgentReport.model_validate_json(json_str)
         assert parsed.vulnerability_type == "XSS"
 
-    def test_mock_response_matches_diagnosis_schema(self):
+    def test_mock_response_matches_report_schema(self):
         with patch("vulnguard.agents.red_agent.cfg") as mock_cfg:
             mock_cfg.llm.mock_mode = True
             response = _call_llm([], risk_score=100.0)
 
         report = RedAgentReport.model_validate_json(response)
         assert report.vulnerability_found is True
-        # The mock returns the diagnosis phase only; the harness is a separate call.
+        # Mock mode has no provider to write a harness, so it stays absent and
+        # the node reports the exploit as unavailable instead of inventing one.
         assert report.exploit_code_harness is None
 
     def test_schema_wrapped_response_is_unwrapped(self):
@@ -258,16 +259,24 @@ class TestExploitLanguageValidation:
             report, state
         )
 
-    def test_harness_prompt_pins_target_language(self):
+    def test_single_request_pins_the_language_and_asks_for_both_halves(self):
         state = initial_state("vuln_buffer.c:process_data", "pass", "c", 90.0, {})
-        diagnosis = RedAgentDiagnosis(vulnerability_found=True)
+        state["file_path"] = "vuln_buffer.c"
 
-        system_prompt = _harness_messages(state, diagnosis)[0]["content"]
+        messages = _analysis_messages(state)
+        system_prompt = messages[0]["content"]
+        user_prompt = messages[1]["content"]
 
+        assert "ONE structured JSON object" in system_prompt
         assert "The target language is c" in system_prompt
         assert "#include <stdio.h>" in system_prompt
         assert "int main(void)" in system_prompt
         assert "Never switch languages" in system_prompt
+        assert "exploit_code_harness" in system_prompt
+        assert "vulnerability_found" in system_prompt
+        # Harness and diagnosis are requested in the same response.
+        assert "Diagnose this function" in user_prompt
+        assert "SAME JSON object" in user_prompt
 
     def test_rejects_python_harness_for_c_target(self):
         report = RedAgentReport(
@@ -314,15 +323,18 @@ class TestExploitLanguageValidation:
             }
         )
 
+        first = json.dumps({**json.loads(diagnosis), **json.loads(invalid)})
+        second = json.dumps({**json.loads(diagnosis), **json.loads(corrected)})
+
         with patch(
             "vulnguard.agents.red_agent._call_llm",
-            side_effect=[diagnosis, invalid, corrected],
+            side_effect=[first, second],
         ) as call_llm:
             result = red_agent_node(state)
 
-        # Call 1 = diagnosis, call 2 = harness, call 3 = corrective harness prompt.
-        retry_messages = call_llm.call_args_list[2].args[0]
-        assert {"role": "assistant", "content": invalid} in retry_messages
+        # Call 1 = structured report, call 2 = the single regeneration.
+        retry_messages = call_llm.call_args_list[1].args[0]
+        assert {"role": "assistant", "content": first} in retry_messages
         assert "embedded in exploit input" in retry_messages[-1]["content"]
         assert "touch /tmp/vg_probe" in result["exploit_harness"]
         assert result["exploit_status"] == "AVAILABLE"
@@ -358,15 +370,19 @@ class TestExploitLanguageValidation:
         state = initial_state("vuln_cmdi.py:ping_host", "pass", "python", 90.0, {})
         state["file_path"] = "vuln_cmdi.py"
 
+        first = json.dumps({**json.loads(diagnosis), **json.loads(empty)})
+        second = json.dumps({**json.loads(diagnosis), **json.loads(corrected)})
+
         with patch(
             "vulnguard.agents.red_agent._call_llm",
-            side_effect=[diagnosis, empty, corrected],
+            side_effect=[first, second],
         ) as call_llm:
             result = red_agent_node(state)
 
-        retry_messages = call_llm.call_args_list[2].args[0]
+        retry_messages = call_llm.call_args_list[1].args[0]
         assert "no exploit_code_harness" in retry_messages[-1]["content"]
-        assert retry_messages[2]["content"] == empty
+        # Two analysis messages, then the rejected report itself.
+        assert retry_messages[2]["content"] == first
         assert result["exploit_status"] == "AVAILABLE"
         assert "VULNGUARD_POC_SUCCESS" in result["exploit_harness"]
 
@@ -623,12 +639,12 @@ class TestRedAgentParseFailures:
 
         with patch(
             "vulnguard.agents.red_agent._call_llm",
-            side_effect=[self.TRUNCATED, self.TRUNCATED, self.TRUNCATED, self.TRUNCATED],
+            side_effect=[self.TRUNCATED, self.TRUNCATED],
         ) as call_llm:
             result = red_agent_node(state)
 
-        # Two full-diagnosis attempts, then two compact-mode attempts.
-        assert len(call_llm.call_args_list) == 4
+        # The structured request, then exactly one corrective request.
+        assert len(call_llm.call_args_list) == 2
         assert result["pipeline_status"] == "RED_ERROR"
         assert result["judge_verdict"] == "RED_AGENT_ERROR"
         assert result["red_report"]["parse_error"]
@@ -651,7 +667,8 @@ class TestRedAgentParseFailures:
         corrective_prompts = [
             message["content"]
             for message in retry_messages
-            if message["role"] == "user" and "not valid JSON" in message["content"]
+            if message["role"] == "user"
+            and "could not be read as a valid JSON object" in message["content"]
         ]
         assert corrective_prompts
 
@@ -719,8 +736,10 @@ class TestRedAgentParseFailures:
 
     def test_invalid_harness_never_becomes_an_exploit(self):
         state = initial_state("vuln_cmdi.py:ping_host", "def ping_host():\n    pass", "python", 90.0, {})
+        state["file_path"] = "vuln_cmdi.py"
         bad_harness = json.dumps(
             {
+                **json.loads(self.DIAGNOSIS),
                 "exploit_type": "python_script",
                 "exploit_code_harness": "print('DEFECT_TRIGGERED')",
                 "expected_stdout_regex": "DEFECT_TRIGGERED",
@@ -729,7 +748,7 @@ class TestRedAgentParseFailures:
 
         with patch(
             "vulnguard.agents.red_agent._call_llm",
-            side_effect=[self.DIAGNOSIS, bad_harness, bad_harness],
+            side_effect=[bad_harness, bad_harness],
         ):
             result = red_agent_node(state)
 
@@ -742,6 +761,7 @@ class TestRedAgentParseFailures:
         state = initial_state("vuln_cmdi.py:ping_host", "def ping_host():\n    pass", "python", 90.0, {})
         harness = json.dumps(
             {
+                **json.loads(self.DIAGNOSIS),
                 "exploit_type": "python_script",
                 "exploit_code_harness": (
                     "import os\nfrom vuln_cmdi import ping_host\n"
@@ -754,8 +774,7 @@ class TestRedAgentParseFailures:
         state["file_path"] = "vuln_cmdi.py"
 
         with patch(
-            "vulnguard.agents.red_agent._call_llm",
-            side_effect=[self.DIAGNOSIS, harness],
+            "vulnguard.agents.red_agent._call_llm", return_value=harness
         ):
             result = red_agent_node(state)
 

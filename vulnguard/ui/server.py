@@ -39,6 +39,7 @@ from vulnguard.evaluation import (
     write_evaluation_summary,
 )
 from vulnguard.agents.graph import run_pipeline
+from vulnguard.agents.streaming import bind_events, unbind_events
 
 BENCHMARK_DIR = Path(__file__).resolve().parents[2] / "data" / "benchmarks"
 EVALUATION_JSON = BENCHMARK_DIR / "evaluation.json"
@@ -527,25 +528,65 @@ def create_app(
                 repo_root=str(repo_root or ""),
                 start_byte=start_byte,
                 end_byte=end_byte,
+                scan_id=scan_id,
             )
             aggregate.update(state)
             graph_app = compile_graph()
             stage = "agents"
-            async for step in graph_app.astream(state):
-                for node_name, node_state in step.items():
-                    stage = node_name
-                    aggregate.update(node_state)
-                    aggregate["last_agent"] = node_name
-                    persist()
-                    await _safe_send(websocket, 
-                        {
-                            "type": "agent_update",
-                            "scan_id": scan_id,
-                            "function_id": function_id,
-                            "agent": node_name,
-                            "state": node_state,
-                        }
-                    )
+
+            # Agent nodes emit their real intermediate results (diagnosis,
+            # harness, patch, sandbox runs) while they execute. One sender task
+            # serializes those events with the per-node state updates, so the
+            # browser observes strict ML → Red → Blue → Judge progress and never
+            # sees a node reported as finished before its completion event.
+            loop = asyncio.get_running_loop()
+            events: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
+
+            def forward(event: dict[str, Any]) -> None:
+                loop.call_soon_threadsafe(events.put_nowait, event)
+
+            bind_events(scan_id, forward)
+            state["scan_id"] = scan_id
+
+            async def run_graph() -> None:
+                nonlocal stage
+                async for step in graph_app.astream(state):
+                    for node_name, node_state in step.items():
+                        stage = node_name
+                        aggregate.update(node_state)
+                        aggregate["last_agent"] = node_name
+                        persist()
+                        # Same scheduling path as `forward`, so an agent's events
+                        # always precede the state update of the node that
+                        # emitted them.
+                        loop.call_soon_threadsafe(
+                            events.put_nowait,
+                            {
+                                "type": "agent_update",
+                                "scan_id": scan_id,
+                                "function_id": function_id,
+                                "agent": node_name,
+                                "state": node_state,
+                            },
+                        )
+
+            async def send_events() -> None:
+                while True:
+                    event = await events.get()
+                    if event is None:
+                        return
+                    await _safe_send(websocket, event)
+
+            graph_task = asyncio.create_task(run_graph())
+            sender_task = asyncio.create_task(send_events())
+            try:
+                await graph_task
+            finally:
+                unbind_events(scan_id)
+                loop.call_soon_threadsafe(events.put_nowait, None)
+                # A closed socket is reported by the code that follows; it must
+                # not mask the graph's own failure here.
+                await asyncio.gather(sender_task, return_exceptions=True)
 
             status = aggregate.get("pipeline_status")
             if status == "RED_COMPLETE" and not aggregate.get("vulnerability_found"):

@@ -14,6 +14,7 @@ from enum import Enum
 from typing import Any
 
 from vulnguard.agents.state import VulnGuardState
+from vulnguard.agents.streaming import emit
 from vulnguard.config import cfg
 
 logger = logging.getLogger(__name__)
@@ -178,6 +179,13 @@ def _get_full_file_code(state: VulnGuardState, use_patched: bool) -> str:
     return (before + new_bytes + after).decode("utf-8", errors="replace")
 
 
+def _event_logs(logs: str, limit: int = 4000) -> str:
+    """Bound an execution log so a stream event stays small."""
+    if len(logs) <= limit:
+        return logs
+    return logs[:limit] + f"\n[... truncated, {len(logs)} chars total]"
+
+
 def _run_build(state: VulnGuardState, use_patched: bool = False) -> tuple[bool, str]:
     """Run build in Docker sandbox. Returns (success, logs)."""
     try:
@@ -337,11 +345,27 @@ def _validate(state: VulnGuardState) -> tuple[JudgeVerdict, str]:
     if repo_root:
         # ── Step 1: Build (full project only) ─────────────
         build_ok, build_logs = _run_build(state, use_patched=True)
+        emit(
+            state,
+            "judge_build_result",
+            agent="judge_agent",
+            success=build_ok,
+            skipped=False,
+            logs=_event_logs(build_logs),
+        )
         if not build_ok:
             return JudgeVerdict.BUILD_FAILED, _truncate_error_logs(build_logs)
 
         # ── Step 2: Tests (full project only) ─────────────
         tests_ok, test_logs = _run_tests(state)
+        emit(
+            state,
+            "judge_regression_result",
+            agent="judge_agent",
+            success=tests_ok,
+            skipped="skipped" in test_logs.lower(),
+            logs=_event_logs(test_logs),
+        )
         if not tests_ok:
             return JudgeVerdict.TESTS_FAILED, _truncate_error_logs(test_logs)
     else:
@@ -354,6 +378,21 @@ def _validate(state: VulnGuardState) -> tuple[JudgeVerdict, str]:
         vulnerability_type = (state.get("red_report") or {}).get("vulnerability_type", "")
 
         unpatched_ok, unpatched_logs = _run_exploit(state, use_patched=False)
+        unpatched_reproduced = _execution_started(
+            unpatched_logs
+        ) and _exploit_succeeded(
+            unpatched_ok, unpatched_logs, expected_regex, vulnerability_type
+        )
+        emit(
+            state,
+            "judge_original_result",
+            agent="judge_agent",
+            ran=_execution_started(unpatched_logs),
+            reproduced=unpatched_reproduced,
+            success=unpatched_ok,
+            logs=_event_logs(unpatched_logs),
+            expected_stdout_regex=expected_regex,
+        )
         if not _execution_started(unpatched_logs):
             # The harness or the original target never ran (compile/import
             # failure). That is inconclusive evidence, not a patch failure and
@@ -376,6 +415,18 @@ def _validate(state: VulnGuardState) -> tuple[JudgeVerdict, str]:
 
         # ── Step 3b: Exploit on patched (should NOT trigger) ────
         patched_ok, patched_logs = _run_exploit(state, use_patched=True)
+        patched_reproduced = _execution_started(
+            patched_logs
+        ) and _exploit_succeeded(patched_ok, patched_logs, expected_regex, vulnerability_type)
+        emit(
+            state,
+            "judge_patched_result",
+            agent="judge_agent",
+            ran=_execution_started(patched_logs),
+            reproduced=patched_reproduced,
+            success=patched_ok,
+            logs=_event_logs(patched_logs),
+        )
         if not _execution_started(patched_logs):
             return (
                 JudgeVerdict.BUILD_FAILED,
@@ -413,6 +464,13 @@ def judge_agent_node(state: VulnGuardState) -> dict[str, Any]:
     attempt = state.get("attempt_number", 0)
     logger.info("⚖️  Judge Agent validating patch (attempt %d)", attempt + 1)
     start = time.time()
+    emit(
+        state,
+        "judge_started",
+        agent="judge_agent",
+        attempt_number=attempt,
+        max_attempts=state.get("max_attempts", 3),
+    )
 
     # Check if Blue Agent already rejected (interface violation, destructive, etc.)
     pre_verdict = state.get("judge_verdict", "")
@@ -481,4 +539,20 @@ def judge_agent_node(state: VulnGuardState) -> dict[str, Any]:
         result["judge_verdict"] = JudgeVerdict.MAX_RETRIES_EXHAUSTED.value
         logger.warning("⚖️  Max retries exhausted — pipeline FAILED")
 
+    emit(
+        state,
+        "judge_completed",
+        agent="judge_agent",
+        verdict=result["judge_verdict"],
+        judge_verdict=result["judge_verdict"],
+        pipeline_status=result["pipeline_status"],
+        build_success=result["build_success"],
+        test_success=result["test_success"],
+        exploit_confirmed=result["exploit_confirmed"],
+        exploit_blocked=result["exploit_blocked"],
+        security_validated=result["security_validated"],
+        error_logs=_event_logs(error_logs or ""),
+        attempt_number=result.get("attempt_number", attempt),
+        max_attempts=max_attempts,
+    )
     return result

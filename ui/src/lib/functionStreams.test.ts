@@ -129,6 +129,112 @@ describe('functionStreams', () => {
     expect(finalStatus('COMPLETE', undefined)).toBe('COMPLETED');
   });
 
+  it('fills each agent section as progressive events arrive', () => {
+    let stream = makeStream('run');
+
+    stream = applyStreamEvent(stream, { type: 'red_started' });
+    expect(stream.red?.started).toBe(true);
+    // Never completed before the completion event.
+    expect(stream.red?.completed).toBeFalsy();
+
+    stream = applyStreamEvent(stream, {
+      type: 'red_diagnosis',
+      vulnerability_found: true,
+      diagnosis: { vulnerability_type: 'CODE_INJECTION', cwe_id: 'CWE-95' },
+    });
+    expect(stream.red?.vulnerability_type).toBe('CODE_INJECTION');
+    expect(stream.red?.completed).toBeFalsy();
+
+    stream = applyStreamEvent(stream, {
+      type: 'red_harness_generated',
+      exploit_type: 'python_script',
+      exploit_code_harness: 'print("HARNESS_BODY")',
+      expected_stdout_regex: 'VULNGUARD_POC_SUCCESS',
+      exploit_status: 'AVAILABLE',
+    });
+    expect(stream.red?.exploit_harness).toContain('HARNESS_BODY');
+    expect(stream.exploitStatus).toBe('AVAILABLE');
+
+    stream = applyStreamEvent(stream, {
+      type: 'red_completed',
+      vulnerability_found: true,
+      exploit_status: 'AVAILABLE',
+      pipeline_status: 'RED_COMPLETE',
+    });
+    expect(stream.red?.completed).toBe(true);
+
+    stream = applyStreamEvent(stream, {
+      type: 'blue_patch_generated',
+      patched_code: 'def run(value):\n    return int(value)',
+      patch_diff: '--- original\n+++ patched\n+    return int(value)',
+      patch_justification: 'Stop evaluating input.',
+    });
+    expect(stream.blue?.patched_code).toContain('int(value)');
+    expect(stream.blue?.completed).toBeFalsy();
+
+    stream = applyStreamEvent(stream, {
+      type: 'judge_original_result',
+      ran: true,
+      reproduced: true,
+      success: true,
+      logs: 'ORIGINAL_EXECUTION_LOG',
+    });
+    expect(stream.judge?.exploit_confirmed).toBe(true);
+    expect(stream.judge?.completed).toBeFalsy();
+
+    stream = applyStreamEvent(stream, {
+      type: 'judge_patched_result',
+      ran: true,
+      reproduced: false,
+      success: false,
+      logs: 'PATCHED_EXECUTION_LOG',
+    });
+    expect(stream.judge?.exploit_blocked).toBe(true);
+
+    stream = applyStreamEvent(stream, {
+      type: 'judge_completed',
+      judge_verdict: 'PASS',
+      pipeline_status: 'COMPLETE',
+      build_success: true,
+      test_success: true,
+      exploit_confirmed: true,
+      exploit_blocked: true,
+      security_validated: true,
+      attempt_number: 0,
+      max_attempts: 3,
+    });
+
+    expect(stream.judge?.completed).toBe(true);
+    expect(stream.judge?.judge_verdict).toBe('PASS');
+    expect(stream.status).toBe('PASS');
+    expect(stream.judge?.original?.logs).toBe('ORIGINAL_EXECUTION_LOG');
+    expect(stream.judge?.patched?.logs).toBe('PATCHED_EXECUTION_LOG');
+  });
+
+  it('keeps progressive execution logs when the node state update arrives', () => {
+    let stream = makeStream('run');
+    stream = applyStreamEvent(stream, {
+      type: 'judge_original_result',
+      ran: true,
+      reproduced: false,
+      success: true,
+      logs: 'ORIGINAL_LOG',
+    });
+    stream = applyStreamEvent(stream, {
+      type: 'agent_update',
+      agent: 'judge_agent',
+      state: {
+        pipeline_status: 'FAILED',
+        judge_verdict: 'EXPLOIT_NOT_REPRODUCED',
+        exploit_confirmed: false,
+      },
+    });
+
+    expect(stream.judge?.original?.logs).toBe('ORIGINAL_LOG');
+    expect(stream.judge?.judge_verdict).toBe('EXPLOIT_NOT_REPRODUCED');
+    expect(stream.status).toBe('INCONCLUSIVE');
+  });
+
   it('rebuilds independent Red, Blue and Judge sections from stored events', () => {
     const run: StoredScanOutput = {
       id: 'stored-run',

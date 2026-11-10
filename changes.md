@@ -238,3 +238,55 @@ installation were not exercised.
   rejected by harness validation rather than silently "proven" — by design, but it limits coverage.
 - Pre-existing: the Judge's build/test steps are vacuous without a build system or collected tests
   (§9.5), and `patcher.py::apply_patch` still raises `NameError` (§9.5).
+
+## 12. Single structured Red report + sequential agent stream (2026-11-10)
+
+**Objective 1 — reliable diagnosis + harness generation**
+
+- Root cause of `the harness JSON had no exploit_code_harness`: diagnosis and harness were two
+  separate model calls. The second, harness-only request used an all-optional schema, so JSON mode
+  could legally answer `{"exploit_code_harness": null}` (or spend the budget on reasoning first),
+  and the node then had a valid diagnosis with no artifact.
+- `red_agent.py` now makes **one** structured request whose `RedAgentReport` carries diagnosis and
+  harness together, starting at the harness budget (`VULNGUARD_LLM_HARNESS_MAX_TOKENS`, ceiling
+  capped). The prompt includes the language adapter shape/notes, repository environment and the
+  vulnerability-class technique catalogue, so the model chooses the technique from its own
+  diagnosis.
+- A report that diagnoses a defect but has no usable harness keeps the diagnosis and triggers
+  exactly **one** regeneration that states the precise rejection (`no exploit_code_harness`, wrong
+  language, missing success regex, target redefinition, marker in attacker input, ...) and asks for
+  the complete object again. A failed second attempt sets `exploit_status=UNAVAILABLE|INVALID`,
+  `exploit_failure_kind` and `exploit_error`; it never becomes a false negative or a PASS.
+- Unreadable/truncated JSON gets one corrective request. Harness key aliases (`exploit_code`,
+  `poc_code`, ...) are accepted, but only after the same static validation.
+- Adapters, environment probing, strategy guidance, context gathering and Docker integration are
+  unchanged; only the request shape that produced the regression changed.
+
+**Objective 2 — sequential ML → Red → Blue → Judge stream**
+
+- New `vulnguard/agents/streaming.py`: a per-`scan_id` event registry. Nodes emit real results at
+  the moment they exist (`red_started`, `red_diagnosis`, `red_harness_generated`, `red_completed`,
+  `blue_started`, `blue_patch_generated`, `blue_completed`, `judge_started`,
+  `judge_original_result`, `judge_patched_result`, `judge_build_result`,
+  `judge_regression_result`, `judge_completed`). No chain-of-thought and no invented progress.
+- `VulnGuardState`/`initial_state` carry `scan_id`; the WebSocket handler binds a sink and runs the
+  graph and a sender task concurrently, scheduling every event and node update through the same
+  `call_soon_threadsafe` path so ordering is deterministic. With no client attached the registry is
+  a no-op, so CLI/evaluation runs are unaffected.
+- `ui/src/lib/functionStreams.ts` merges progressive events into the existing per-function record
+  (still keyed `scanId::functionId`), preserving logs when the node's final state arrives.
+- `ui/src/components/AgentFeed.tsx` keeps the vertical full-width ML Triage → Red → Blue → Judge
+  order, adds waiting/running/complete stage badges driven only by received events, and renders the
+  judge's original/patched execution logs plus build/regression outcome. ML triage metrics
+  (maintainability index, LOC, cyclomatic complexity, ...) and judge metrics remain visible.
+- Existing multi-function behaviour is unchanged: every function keeps its own card and history.
+
+**Tests**
+
+- Backend: **247 passed** — includes single-response contract, missing-harness regeneration,
+  invalid-second-response diagnosis preservation, unreadable-response correction, adapter/strategy
+  contracts, independent repositories, six regression scenarios, event order/content and WebSocket
+  transport order.
+- Frontend: **32 passed** (`npx vitest run`), `npx tsc -b`, `npm run lint` (0/0), `npx vite build`.
+- Not run: a live Gemini request, real Docker dual-pass execution, and a browser visual pass.
+  Every streaming/LLM test here uses mocks; Docker was not exercised.

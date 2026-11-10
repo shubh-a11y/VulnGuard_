@@ -25,6 +25,7 @@ from typing import Any, Optional
 from pydantic import BaseModel, Field
 
 from vulnguard.agents.state import VulnGuardState
+from vulnguard.agents.streaming import emit
 from vulnguard.config import cfg
 
 logger = logging.getLogger(__name__)
@@ -430,6 +431,13 @@ def blue_agent_node(state: VulnGuardState) -> dict[str, Any]:
     attempt = state.get("attempt_number", 0)
     logger.info("🔵 Blue Agent generating patch (attempt %d)", attempt + 1)
     start = time.time()
+    emit(
+        state,
+        "blue_started",
+        agent="blue_agent",
+        attempt_number=attempt,
+        max_attempts=state.get("max_attempts", 3),
+    )
 
     timestamps = {**state.get("timestamps", {}), "blue_end": time.time()}
     risk_score = state.get("risk_score", 100.0)
@@ -472,20 +480,43 @@ def blue_agent_node(state: VulnGuardState) -> dict[str, Any]:
                     },
                 ]
     except LLMCallError as exc:
-        return _generation_error(str(exc), timestamps)
+        result = _generation_error(str(exc), timestamps)
+        emit(state, "blue_completed", agent="blue_agent", **{
+            "pipeline_status": "BLUE_ERROR",
+            "error_logs": result["error_logs"],
+            "patched_code": None,
+        })
+        return result
     except Exception as exc:  # defensive: keep the graph alive, log the cause
         logger.exception("🔵 Blue Agent crashed while building the prompt")
-        return _generation_error(f"internal error: {exc}", timestamps)
+        result = _generation_error(f"internal error: {exc}", timestamps)
+        emit(state, "blue_completed", agent="blue_agent", **{
+            "pipeline_status": "BLUE_ERROR",
+            "error_logs": result["error_logs"],
+            "patched_code": None,
+        })
+        return result
 
     if patch is None:
-        return _generation_error(
+        result = _generation_error(
             f"output was not parseable after {_PARSE_ATTEMPTS} attempts: {parse_error}",
             timestamps,
         )
+        emit(state, "blue_completed", agent="blue_agent", **{
+            "pipeline_status": "BLUE_ERROR",
+            "error_logs": result["error_logs"],
+            "patched_code": None,
+        })
+        return result
 
     # ── Validate interface preservation ───────────────────
     if not patch.preserved_interface:
         logger.warning("Blue Agent declared interface NOT preserved — rejecting")
+        emit(state, "blue_completed", agent="blue_agent", **{
+            "pipeline_status": "BLUE_INTERFACE_VIOLATION",
+            "error_logs": "Blue Agent broke function interface contract",
+            "patched_code": patch.patched_code,
+        })
         return {
             "patched_code": patch.patched_code,
             "pipeline_status": "BLUE_INTERFACE_VIOLATION",
@@ -497,6 +528,11 @@ def blue_agent_node(state: VulnGuardState) -> dict[str, Any]:
     # ── Reject new dependencies (Section 4.4) ────────────
     if patch.new_dependencies_added:
         logger.warning("Blue Agent added new dependencies — rejecting")
+        emit(state, "blue_completed", agent="blue_agent", **{
+            "pipeline_status": "BLUE_NEW_DEPS",
+            "error_logs": "Blue Agent attempted to add unapproved dependencies",
+            "patched_code": patch.patched_code,
+        })
         return {
             "patched_code": patch.patched_code,
             "pipeline_status": "BLUE_NEW_DEPS",
@@ -508,6 +544,11 @@ def blue_agent_node(state: VulnGuardState) -> dict[str, Any]:
     insecure_reason = _insecure_patch_reason(state, patch.patched_code)
     if insecure_reason:
         logger.warning("Insecure patch rejected: %s", insecure_reason)
+        emit(state, "blue_completed", agent="blue_agent", **{
+            "pipeline_status": "BLUE_INSECURE_PATCH",
+            "error_logs": insecure_reason,
+            "patched_code": patch.patched_code,
+        })
         return {
             "patched_code": patch.patched_code,
             "pipeline_status": "BLUE_INSECURE_PATCH",
@@ -524,6 +565,11 @@ def blue_agent_node(state: VulnGuardState) -> dict[str, Any]:
     )
     if not ok:
         logger.warning("Anti-triviality check failed: %s", reason)
+        emit(state, "blue_completed", agent="blue_agent", **{
+            "pipeline_status": "BLUE_DESTRUCTIVE",
+            "error_logs": reason,
+            "patched_code": patch.patched_code,
+        })
         return {
             "patched_code": patch.patched_code,
             "pipeline_status": "BLUE_DESTRUCTIVE",
@@ -537,6 +583,27 @@ def blue_agent_node(state: VulnGuardState) -> dict[str, Any]:
 
     elapsed = time.time() - start
     logger.info("🔵 Blue Agent patch generated (%.1fs): %s", elapsed, patch.changes_summary[:100])
+
+    emit(
+        state,
+        "blue_patch_generated",
+        agent="blue_agent",
+        patched_code=patch.patched_code,
+        patch_diff=diff,
+        patch_justification=patch.justification,
+        changes_summary=patch.changes_summary,
+        attempt_number=attempt,
+    )
+    emit(
+        state,
+        "blue_completed",
+        agent="blue_agent",
+        pipeline_status="BLUE_COMPLETE",
+        patched_code=patch.patched_code,
+        patch_diff=diff,
+        patch_justification=patch.justification,
+        error_logs="",
+    )
 
     return {
         "patched_code": patch.patched_code,

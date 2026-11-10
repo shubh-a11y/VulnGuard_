@@ -295,3 +295,25 @@ def strategy_for(
 def strategy_keys() -> tuple[str, ...]:
     """The documented strategy set (used by the docs and the adapter tests)."""
     return tuple(strategy.key for strategy in _STRATEGIES) + (_GENERIC.key,)
+
+
+def strategy_catalog() -> str:
+    """Compact catalogue for a request that must choose its own class.
+
+    The single structured Red Agent request produces the diagnosis, so the
+    vulnerability class is not known before the call. Sending every class's
+    observable proof and approach (a few lines each) is still small, and the
+    model applies the one matching its own diagnosis. Once a diagnosis exists
+    (regeneration), `strategy_for` narrows it to a single block.
+    """
+    blocks = []
+    for strategy in _STRATEGIES:
+        blocks.append(
+            f"- {strategy.key}: setup = {strategy.prerequisites}; "
+            f"proof = {strategy.observable}; approach = {strategy.guidance}"
+        )
+    blocks.append(
+        f"- {_GENERIC.key} (use when nothing matches): setup = {_GENERIC.prerequisites}; "
+        f"proof = {_GENERIC.observable}; approach = {_GENERIC.guidance}"
+    )
+    return "\n".join(blocks)
