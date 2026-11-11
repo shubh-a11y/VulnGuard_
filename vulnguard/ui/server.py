@@ -243,7 +243,34 @@ def create_app(
 
     @app.get("/api/metrics")
     async def get_metrics():
-        return JSONResponse(scan_store.metrics())
+        data = scan_store.metrics()
+        health = scan_store.model_health()
+        data.update({
+            "recall": health["recall"],
+            "precision": health["precision"],
+            "patch_success_rate": health["patch_success_rate"],
+        })
+        return JSONResponse(data)
+
+    @app.post("/api/scans/reset")
+    async def reset_scans():
+        """Reset all recorded scans to zero so a fresh recording session can begin."""
+        deleted = scan_store.clear_all()
+        if EVALUATION_JSON.exists():
+            try:
+                EVALUATION_JSON.unlink()
+            except Exception:
+                pass
+        return JSONResponse({
+            "status": "ok",
+            "message": f"Successfully reset {deleted} scans to zero.",
+            "deleted_count": deleted,
+        })
+
+    @app.get("/api/analytics/charts")
+    async def get_analytics_charts():
+        """Return structured 2D chart data for ML accuracy and Blue patching."""
+        return JSONResponse(scan_store.chart_data())
 
     @app.post("/upload")
     async def upload_target(file: UploadFile = File(...)):
@@ -265,6 +292,8 @@ def create_app(
 
     @app.get("/api/evaluation/model-health")
     async def get_model_health():
+        if scan_store.metrics()["total_scans"] > 0:
+            return JSONResponse(scan_store.model_health())
         return JSONResponse(model_health_metrics_from_store())
 
     _figures_dir = Path(__file__).resolve().parents[2] / "data" / "benchmarks"

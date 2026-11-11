@@ -32,6 +32,7 @@ import {
   type FunctionStream,
 } from '../lib/functionStreams';
 import { MetricCard, ModelHealthCard } from './dashboard/MetricCards';
+import { EvaluationCharts } from './dashboard/EvaluationCharts';
 
 const API = 'http://localhost:8000';
 const WS = 'ws://localhost:8000/ws/scan';
@@ -83,6 +84,8 @@ export default function Dashboard() {
   const [storedOutputs, setStoredOutputs] = useState<StoredScanOutput[]>([]);
   const [runningEvaluation, setRunningEvaluation] = useState(false);
   const [evaluationError, setEvaluationError] = useState('');
+  const [refreshCounter, setRefreshCounter] = useState(0);
+  const [resettingTelemetry, setResettingTelemetry] = useState(false);
   const wsRegistry = useRef<Map<string, WebSocket>>(new Map());
   const sessionRef = useRef('');
   const cancelledRef = useRef(false);
@@ -105,8 +108,28 @@ export default function Dashboard() {
       if (verdictRes.status === 'fulfilled' && verdictRes.value.ok) setVerdicts(await verdictRes.value.json());
       if (healthRes.status === 'fulfilled' && healthRes.value.ok) setModelHealth(await healthRes.value.json());
       if (evaluationRes.status === 'fulfilled' && evaluationRes.value.ok) setEvaluation(await evaluationRes.value.json());
+      setRefreshCounter((c) => c + 1);
     } catch {
       // The scan workflow reports connection errors where the user acts on them.
+    }
+  };
+
+  const resetTelemetry = async () => {
+    if (!window.confirm('Are you sure you want to reset all scan telemetry and analytics to zero?')) {
+      return;
+    }
+    setResettingTelemetry(true);
+    try {
+      const res = await fetch(`${API}/api/scans/reset`, { method: 'POST' });
+      if (!res.ok) throw new Error('Reset failed');
+      removeAllStoredOutputs();
+      clearStreams();
+      await loadDashboardData();
+      setRefreshCounter((c) => c + 1);
+    } catch (err) {
+      console.error('Failed to reset telemetry:', err);
+    } finally {
+      setResettingTelemetry(false);
     }
   };
 
@@ -614,9 +637,21 @@ export default function Dashboard() {
           animate={{ opacity: 1, y: 0 }}
           className="mt-6 flex flex-col gap-6"
         >
-          <div className="flex items-center gap-3">
-            <BarChart3 className="w-5 h-5 text-white/50" />
-            <h2 className="text-sm font-medium text-white/80">Evaluation Analytics</h2>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <BarChart3 className="w-5 h-5 text-white/50" />
+              <h2 className="text-sm font-medium text-white/80">Evaluation Analytics</h2>
+            </div>
+            <button
+              type="button"
+              onClick={resetTelemetry}
+              disabled={resettingTelemetry}
+              className="flex items-center gap-1.5 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-1.5 text-xs text-red-300 hover:bg-red-500/20 hover:border-red-500/30 transition-all disabled:opacity-50"
+              title="Reset all recorded scans, telemetry, and analytics to zero"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>{resettingTelemetry ? 'Resetting...' : 'Reset Telemetry to Zero'}</span>
+            </button>
           </div>
 
           <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
@@ -635,6 +670,9 @@ export default function Dashboard() {
             <ModelHealthCard title="Triage precision" value={modelHealth.precision} color="green" />
             <ModelHealthCard title="Patch success rate" value={modelHealth.patch_success_rate} color="amber" />
           </div>
+
+          {/* Interactive 2D Charts for ML Accuracy and Blue Patching */}
+          <EvaluationCharts apiBase={API} refreshTrigger={refreshCounter} />
 
           <div className="grid grid-cols-1 gap-6">
             <div className="glassmorphism rounded-3xl p-6">

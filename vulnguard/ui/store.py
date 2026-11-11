@@ -111,7 +111,168 @@ class ScanStore:
             "total_scans": total,
             "vulnerabilities_found": vulnerable,
             "patches_validated": patched,
-            "patch_rate": patched / max(vulnerable, 1),
+            "patch_rate": (patched / vulnerable) if vulnerable > 0 else 0.0,
+        }
+
+    def clear_all(self) -> int:
+        """Clear all recorded scans from the operational store."""
+        with self._connect() as connection:
+            cursor = connection.execute("DELETE FROM scans")
+            count = cursor.rowcount
+            connection.commit()
+        return count
+
+    def model_health(self, triage_threshold: float = 30.0) -> dict[str, float]:
+        """Compute live detection recall, triage precision, and patch success rate."""
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT
+                    COUNT(*) AS total,
+                    COALESCE(SUM(vulnerability_found), 0) AS vulnerable,
+                    COALESCE(SUM(CASE WHEN judge_verdict = 'PASS' THEN 1 ELSE 0 END), 0) AS patched
+                FROM scans
+                """
+            ).fetchone()
+            total = int(row["total"])
+            vulnerable = int(row["vulnerable"])
+            patched = int(row["patched"])
+
+            if total == 0:
+                return {"recall": 0.0, "precision": 0.0, "patch_success_rate": 0.0}
+
+            rows = connection.execute(
+                "SELECT vulnerability_found, judge_verdict, result_json FROM scans"
+            ).fetchall()
+
+        triaged_suspicious = 0
+        triaged_confirmed_vuln = 0
+        red_analyzed = 0
+
+        for r in rows:
+            is_vuln = int(r["vulnerability_found"]) == 1
+            try:
+                payload = json.loads(r["result_json"])
+            except Exception:
+                payload = {}
+
+            score = float(payload.get("risk_score", 0.0))
+            if score >= triage_threshold:
+                triaged_suspicious += 1
+                if is_vuln:
+                    triaged_confirmed_vuln += 1
+
+            red_rep = payload.get("red_report")
+            if red_rep and isinstance(red_rep, dict):
+                red_analyzed += 1
+
+        triage_precision = (
+            (triaged_confirmed_vuln / triaged_suspicious)
+            if triaged_suspicious > 0
+            else 0.0
+        )
+        patch_success_rate = (
+            (patched / vulnerable)
+            if vulnerable > 0
+            else 0.0
+        )
+        detection_recall = (
+            (vulnerable / red_analyzed)
+            if red_analyzed > 0
+            else (vulnerable / total if total > 0 else 0.0)
+        )
+
+        return {
+            "recall": round(detection_recall, 4),
+            "precision": round(triage_precision, 4),
+            "patch_success_rate": round(patch_success_rate, 4),
+        }
+
+    def chart_data(self, triage_threshold: float = 30.0) -> dict[str, Any]:
+        """Return 2D chart data for:
+        1. ML Agent Classification Accuracy & Distribution
+        2. Blue Agent Patch Remediation Outcomes
+        """
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT vulnerability_found, judge_verdict, pipeline_status, result_json FROM scans"
+            ).fetchall()
+
+        triaged_confirmed = 0
+        triaged_false_alarms = 0
+        safe_filtered = 0
+
+        patches_pass = 0
+        patches_failed = 0
+        unpatched = 0
+
+        for r in rows:
+            is_vuln = int(r["vulnerability_found"]) == 1
+            verdict = str(r["judge_verdict"] or "").upper()
+            try:
+                payload = json.loads(r["result_json"])
+            except Exception:
+                payload = {}
+
+            score = float(payload.get("risk_score", 0.0))
+            if score >= triage_threshold:
+                if is_vuln:
+                    triaged_confirmed += 1
+                else:
+                    triaged_false_alarms += 1
+            else:
+                safe_filtered += 1
+
+            if is_vuln:
+                if verdict == "PASS":
+                    patches_pass += 1
+                elif verdict in ("FAIL", "BUILD_FAILED", "TEST_FAILED", "RETRY_EXHAUSTED", "REGRESSION_FAILED"):
+                    patches_failed += 1
+                elif payload.get("patched_code"):
+                    patches_failed += 1
+                else:
+                    unpatched += 1
+
+        total_scans = len(rows)
+        total_triaged = triaged_confirmed + triaged_false_alarms
+        ml_accuracy = (
+            ((triaged_confirmed + safe_filtered) / total_scans)
+            if total_scans > 0
+            else 0.0
+        )
+        ml_precision = (
+            (triaged_confirmed / total_triaged)
+            if total_triaged > 0
+            else 0.0
+        )
+
+        total_vulns = triaged_confirmed
+        blue_psr = (
+            (patches_pass / total_vulns)
+            if total_vulns > 0
+            else 0.0
+        )
+
+        return {
+            "total_scans": total_scans,
+            "ml_classification": {
+                "accuracy": round(ml_accuracy, 4),
+                "precision": round(ml_precision, 4),
+                "confirmed_vulnerable": triaged_confirmed,
+                "false_alarms": triaged_false_alarms,
+                "clean_filtered": safe_filtered,
+                "labels": ["Confirmed Vulnerable (TP)", "False Alarms (FP)", "Clean / Filtered (TN)"],
+                "data": [triaged_confirmed, triaged_false_alarms, safe_filtered],
+            },
+            "blue_patching": {
+                "patch_success_rate": round(blue_psr, 4),
+                "patches_pass": patches_pass,
+                "patches_failed": patches_failed,
+                "unpatched": unpatched,
+                "total_vulnerabilities": total_vulns,
+                "labels": ["Patched & Validated (PASS)", "Failed Validation / Regression", "Unpatched / Failed Gen"],
+                "data": [patches_pass, patches_failed, unpatched],
+            },
         }
 
     def verdict_distribution(self) -> dict[str, int]:

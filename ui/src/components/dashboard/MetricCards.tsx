@@ -2,7 +2,12 @@ import { memo } from 'react';
 import { Activity, BarChart3, TrendingUp } from 'lucide-react';
 
 type MetricCardProps = { label: string; value: string; highlight?: boolean };
-type ModelHealthCardProps = { title: string; value: number; color: 'blue' | 'green' | 'amber' };
+type ModelHealthCardProps = {
+  title: string;
+  value: number | string;
+  color: 'blue' | 'green' | 'amber';
+  subtitle?: string;
+};
 
 const MetricCardMemo = memo(function MetricCardInner(props: MetricCardProps) {
   return (
@@ -57,13 +62,26 @@ const ModelHealthCardMemo = memo(function ModelHealthCardInner(props: ModelHealt
           </span>
         </div>
       </div>
-      <span style={{
-        fontSize: '1.5rem',
-        fontWeight: '700',
-        color: style.color,
-      }}>
-        {typeof props.value === 'number' && !Number.isInteger(props.value) ? props.value.toFixed(2) : String(props.value)}
-      </span>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem' }}>
+        <span style={{
+          fontSize: '1.5rem',
+          fontWeight: '700',
+          color: style.color,
+        }}>
+          {typeof props.value === 'string'
+            ? props.value
+            : props.value === 0
+              ? '0%'
+              : props.value <= 1
+                ? `${Math.round(props.value * 100)}%`
+                : `${props.value}%`}
+        </span>
+        {typeof props.value === 'number' && props.value > 0 && props.value <= 1 && (
+          <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.35)' }}>
+            ({props.value.toFixed(2)})
+          </span>
+        )}
+      </div>
     </div>
   );
 });

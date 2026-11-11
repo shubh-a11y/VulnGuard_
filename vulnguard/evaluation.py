@@ -694,13 +694,26 @@ def _compute_verdict_distribution(results: list[LabelResult]) -> dict[str, int]:
 
 
 def model_health_metrics_from_store(store_path: str | Path | None = None) -> dict[str, float]:
-    """Best-effort model health numbers pulled from a recent labeled run or fallback.
+    """Best-effort model health numbers pulled from the live scan store or a recent labeled run.
 
-    The analytics section prefers the latest labeled-evaluation numbers; if none
-    are available yet it returns conservative zeros so the UI never breaks.
+    The analytics section prefers live scan metrics when scans exist; otherwise it checks
+    the latest labeled-evaluation numbers; if none are available or after a reset it returns
+    clean zeros so the UI starts fresh.
     """
     import json
 
+    # 1. Check live scan store first if available
+    db_file = Path(store_path) if store_path else (Path(__file__).resolve().parents[1] / "data" / "vulnguard.db")
+    if db_file.exists():
+        try:
+            from vulnguard.ui.store import ScanStore
+            store = ScanStore(db_file)
+            if store.metrics()["total_scans"] > 0:
+                return store.model_health()
+        except Exception as exc:
+            logger.debug("Could not read live model-health from ScanStore: %s", exc)
+
+    # 2. Check standard evaluation.json
     if EVALUATION_JSON.exists():
         try:
             payload = json.loads(EVALUATION_JSON.read_text(encoding="utf-8"))
@@ -714,4 +727,5 @@ def model_health_metrics_from_store(store_path: str | Path | None = None) -> dic
         except Exception as exc:
             logger.debug("Could not read model-health from evaluation.json: %s", exc)
 
+    # 3. Clean zeros (fresh start)
     return {"recall": 0.0, "precision": 0.0, "patch_success_rate": 0.0}

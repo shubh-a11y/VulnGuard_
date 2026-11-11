@@ -269,6 +269,18 @@ def aggregate_run_metrics(run_dir: Path) -> tuple[dict[str, Any], list[dict[str,
         [c["case_id"] for c in failed_first_attempt],
     )
 
+    # -----------------------------------------------------------------------
+    # 7. Triage Precision & Detection Recall (Model Health Metrics)
+    # -----------------------------------------------------------------------
+    triaged_selected_cases = [c for c in cases if c.get("triage", {}).get("selected", False)]
+    triaged_vuln_cases = [c for c in triaged_selected_cases if c.get("ground_truth") == "vulnerable"]
+    triage_precision = make_metric(
+        "triaged_vulnerable_cases / total_triaged_selected_cases",
+        len(triaged_vuln_cases),
+        len(triaged_selected_cases),
+        [c["case_id"] for c in triaged_selected_cases],
+    )
+
     metrics_dict = {
         "run_id": run_dir.name,
         "total_cases_evaluated": len(cases),
@@ -276,6 +288,9 @@ def aggregate_run_metrics(run_dir: Path) -> tuple[dict[str, Any], list[dict[str,
         "safe_control_cases": len(safe_cases),
         "eligible_vulnerable_cases": len(eligible_vuln_cases),
         "detection_rate": detection_rate,
+        "detection_recall": detection_rate,
+        "triage_precision": triage_precision,
+        "patch_success_rate": psr_3,
         "cwe_classification_accuracy": cwe_accuracy,
         "localization_accuracy": localization_accuracy,
         "psr_at_1": psr_1,
@@ -352,7 +367,8 @@ def export_markdown_table(metrics: dict[str, Any], out_path: Path):
     ]
 
     metric_keys = [
-        ("Detection Rate (DR)", metrics["detection_rate"]),
+        ("Detection Rate / Recall (DR)", metrics["detection_rate"]),
+        ("Triage Precision", metrics["triage_precision"]),
         ("CWE Classification Accuracy", metrics["cwe_classification_accuracy"]),
         ("Localization Accuracy", metrics["localization_accuracy"]),
         ("Patch Success Rate @ 1 (PSR@1)", metrics["psr_at_1"]),
